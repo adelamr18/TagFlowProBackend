@@ -1,7 +1,7 @@
 app = "tagflowprobackend"  # Replace with your app's name
 
 [build]
-  builder = "docker"  # Tell Fly.io to use Docker for the build
+  dockerfile = "./Dockerfile" 
 
 [[services]]
   internal_port = 80
