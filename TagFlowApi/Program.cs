@@ -39,8 +39,9 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend", policy =>
     {
         policy.WithOrigins(
-                "http://localhost:3000", 
-                "https://tagflowprobackend-production.up.railway.app"
+                "http://localhost:3000",
+                "https://tagflowprobackend-production.up.railway.app",
+                "https://tag-flow-9qtn9p3sg-adels-projects-1a001de9.vercel.app"
             )
             .AllowAnyMethod()
             .AllowAnyHeader();
