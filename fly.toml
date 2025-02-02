@@ -1,4 +1,4 @@
-app = "TagFlowProBackend"  # Replace with your app's name
+app = "tagflowprobackend"  # Replace with your app's name
 
 [build]
   builder = "docker"  # Tell Fly.io to use Docker for the build
