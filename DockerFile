@@ -8,7 +8,9 @@ RUN dotnet restore "TagFlowApi/TagFlowApi.csproj"
 
 # Copy the rest of the code
 COPY . .
-WORKDIR "/src/TagFlowApi"
+
+# Set the working directory to the folder containing the .csproj file
+WORKDIR "/TagFlowApi"
 RUN dotnet publish "TagFlowApi.csproj" -c Release -o /app/publish
 
 # Runtime stage
