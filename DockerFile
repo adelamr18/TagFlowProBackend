@@ -4,13 +4,13 @@ WORKDIR /src
 
 # Copy the project file and restore dependencies
 COPY ["TagFlowApi/TagFlowApi.csproj", "TagFlowApi/"]
-RUN dotnet restore "TagFlowApi/TagFlowApi.csproj"
+RUN dotnet restore "/src/TagFlowApi/TagFlowApi.csproj"
 
 # Copy the rest of the code
 COPY . .
 
 # Set the working directory to the folder containing the .csproj file
-WORKDIR "/TagFlowApi"
+WORKDIR "/src/TagFlowApi"
 RUN dotnet publish "TagFlowApi.csproj" -c Release -o /app/publish
 
 # Runtime stage
