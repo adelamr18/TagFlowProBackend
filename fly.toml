@@ -1,0 +1,12 @@
+app = "TagFlowProBackend"  # Replace with your app's name
+
+[build]
+  builder = "docker"  # Tell Fly.io to use Docker for the build
+
+[[services]]
+  internal_port = 80
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
