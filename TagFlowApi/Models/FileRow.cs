@@ -1,0 +1,24 @@
+namespace TagFlowApi.Models
+{
+    public class FileRow
+    {
+        public int FileRowId { get; set; }
+        public int FileId { get; set; }
+        public string SsnId { get; set; } = "";
+        public string Status { get; set; } = "Unprocessed";
+        public string InsuranceCompany { get; set; } = "";
+        public string MedicalNetwork { get; set; } = "";
+        public string IdentityNumber { get; set; } = "";
+        public string PolicyNumber { get; set; } = "";
+        public string Class { get; set; } = "";
+        public string DeductIblerate { get; set; } = "";
+        public string MaxLimit { get; set; } = "";
+        public string UploadDate { get; set; } = "";
+        public string InsuranceExpiryDate { get; set; } = "";
+        public string BeneficiaryType { get; set; } = "";
+        public string BeneficiaryNumber { get; set; } = "";
+
+        // Navigation property
+        public File File { get; set; } = null!;
+    }
+}
