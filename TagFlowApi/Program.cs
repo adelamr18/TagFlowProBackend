@@ -10,44 +10,50 @@ var builder = WebApplication.CreateBuilder(args);
 //     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddDbContext<DataContext>(options =>
-options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// Register repositories and services
 builder.Services.AddScoped<UserRepository>();
 builder.Services.AddScoped<FileRepository>();
 builder.Services.AddScoped<AdminRepository>();
 builder.Services.AddSingleton<JwtService>();
 
 builder.Services.AddSignalR();
-
 builder.Services.AddControllers();
-
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Configure CORS to allow calls from both your local frontend and production domain
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3000")
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials()
-              .WithMethods("OPTIONS");
+        policy.WithOrigins(
+                "http://localhost:3000", 
+                "https://tagflowprobackend-production.up.railway.app"
+            )
+            .AllowAnyMethod()
+            .AllowAnyHeader();
     });
 });
 
 var app = builder.Build();
 
+// Enable Swagger and configure its endpoint explicitly.
 app.UseSwagger();
-app.UseSwaggerUI();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "TagFlow API V1");
+});
 
-
+// Redirect HTTP to HTTPS
 app.UseHttpsRedirection();
 
+// Apply CORS policy
 app.UseCors("AllowFrontend");
 
+// Map SignalR hubs, default route, and controllers
 app.MapHub<FileStatusHub>("/file-status-hub");
-
 app.MapGet("/", () => Results.Redirect("/swagger"));
 app.MapControllers();
 
