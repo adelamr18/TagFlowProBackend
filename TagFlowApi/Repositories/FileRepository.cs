@@ -317,14 +317,14 @@ namespace TagFlowApi.Repositories
                     if (rowDict.TryGetValue(update.FileRowId, out var fileRow))
                     {
                         if (!string.IsNullOrWhiteSpace(update.InsuranceExpiryDate) &&
-                            DateTime.TryParse(update.InsuranceExpiryDate, out var parsedExpiryDate) &&
-                            parsedExpiryDate < DateTime.UtcNow.Date)
+                            DateTime.TryParse(update.InsuranceExpiryDate, out var parsedExpiryDateExpired) &&
+                            parsedExpiryDateExpired < DateTime.UtcNow.Date)
                         {
                             var expiredRecord = new ExpiredSsnIds
                             {
                                 FileRowId = fileRow.FileRowId,
                                 SsnId = update.Ssn,
-                                FileRowInsuranceExpiryDate = parsedExpiryDate.ToString("yyyy-MM-dd"),
+                                FileRowInsuranceExpiryDate = parsedExpiryDateExpired.ToString("yyyy-MM-dd"),
                                 FileId = fileRow.FileId,
                                 ExpiredAt = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")
                             };
@@ -342,15 +342,18 @@ namespace TagFlowApi.Repositories
                             fileRow.Class = update.Class;
                             fileRow.DeductIblerate = update.DeductIblerate;
                             fileRow.MaxLimit = update.MaxLimit;
-                            if (!string.IsNullOrWhiteSpace(update.UploadDate) && DateTime.TryParse(update.UploadDate, out var parsedUploadDate))
+                            if (!string.IsNullOrWhiteSpace(update.UploadDate) &&
+                                DateTime.TryParse(update.UploadDate, out var parsedUploadDate))
                                 fileRow.UploadDate = parsedUploadDate.ToUniversalTime().ToString("yyyy-MM-dd");
-                            if (!string.IsNullOrWhiteSpace(update.InsuranceExpiryDate) && DateTime.TryParse(update.InsuranceExpiryDate, out var parsedExpiryDateForRow))
-                                fileRow.InsuranceExpiryDate = parsedExpiryDateForRow.ToUniversalTime().ToString("yyyy-MM-dd");
+                            if (!string.IsNullOrWhiteSpace(update.InsuranceExpiryDate) &&
+                                DateTime.TryParse(update.InsuranceExpiryDate, out var parsedExpiryDateRow))
+                                fileRow.InsuranceExpiryDate = parsedExpiryDateRow.ToUniversalTime().ToString("yyyy-MM-dd");
                             fileRow.BeneficiaryType = update.BeneficiaryType;
                             fileRow.BeneficiaryNumber = update.BeneficiaryNumber;
                         }
                     }
                 }
+
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
             }
