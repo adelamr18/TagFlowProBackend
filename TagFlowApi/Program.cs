@@ -40,6 +40,9 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+app.UseSwagger();
+app.UseSwaggerUI();
+
 app.UseHttpsRedirection();
 
 app.UseWhen(context => context.Request.Path.StartsWithSegments("/swagger"), appBuilder =>
