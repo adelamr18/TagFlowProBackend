@@ -1,0 +1,1 @@
+This C# backend API is built using ASP.NET Core and PostgreSQL. It handles file uploads, processes Excel file data (including validating SSN formats and merging rows), manages file status updates (including handling expired SSN rows), and sends real-time notifications via SignalR.
