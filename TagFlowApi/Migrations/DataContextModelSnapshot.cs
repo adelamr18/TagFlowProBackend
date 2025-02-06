@@ -110,7 +110,7 @@ namespace TagFlowApi.Migrations
 
                     b.Property<string>("ExpiredAt")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("text");
 
                     b.Property<int>("FileId")
                         .HasColumnType("integer");
@@ -120,7 +120,7 @@ namespace TagFlowApi.Migrations
 
                     b.Property<string>("FileRowInsuranceExpiryDate")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("text");
 
                     b.Property<string>("SsnId")
                         .IsRequired()

@@ -264,8 +264,8 @@ namespace TagFlowApi.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     FileRowId = table.Column<int>(type: "integer", nullable: false),
                     SsnId = table.Column<string>(type: "text", nullable: false),
-                    FileRowInsuranceExpiryDate = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    ExpiredAt = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    FileRowInsuranceExpiryDate = table.Column<string>(type: "text", nullable: false),
+                    ExpiredAt = table.Column<string>(type: "text", nullable: false),
                     FileId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>

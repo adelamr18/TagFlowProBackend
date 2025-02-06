@@ -94,15 +94,14 @@ namespace TagFlowApi.Infrastructure
                 .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<ExpiredSsnIds>(entity =>
-   {
-       entity.HasKey(e => e.ExpiredSsnId);
-       entity.Property(e => e.SsnId).IsRequired();
-       entity.Property(e => e.FileRowInsuranceExpiryDate)
-             .HasColumnType("nvarchar(max)"); // Use the property name from the model
-       entity.Property(e => e.ExpiredAt)
-             .HasColumnType("nvarchar(max)");
-       entity.Property(e => e.FileId).IsRequired();
-   });
+          {
+              entity.HasKey(e => e.ExpiredSsnId);
+              entity.Property(e => e.SsnId).IsRequired();
+              entity.Property(e => e.FileRowInsuranceExpiryDate).HasColumnType("text");
+              entity.Property(e => e.ExpiredAt).HasColumnType("text");
+              entity.Property(e => e.FileId).IsRequired();
+          });
+
             // FileTag relationships use Restrict
             modelBuilder.Entity<FileTag>()
                 .HasOne(ft => ft.File)
@@ -142,7 +141,7 @@ namespace TagFlowApi.Infrastructure
             // Admin configuration
             modelBuilder.Entity<Admin>()
                 .Property(a => a.CreatedAt)
-                .HasColumnType("datetimeoffset");
+                .HasColumnType("timestamptz");
 
             // Project configuration
             modelBuilder.Entity<Project>()

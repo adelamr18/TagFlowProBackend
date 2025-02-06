@@ -13,7 +13,7 @@ using TagFlowApi.Infrastructure;
 namespace TagFlowApi.Migrations
 {
     [DbContext(typeof(DataContext))]
-    [Migration("20250206142737_InitialCreate")]
+    [Migration("20250206143357_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -113,7 +113,7 @@ namespace TagFlowApi.Migrations
 
                     b.Property<string>("ExpiredAt")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("text");
 
                     b.Property<int>("FileId")
                         .HasColumnType("integer");
@@ -123,7 +123,7 @@ namespace TagFlowApi.Migrations
 
                     b.Property<string>("FileRowInsuranceExpiryDate")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("text");
 
                     b.Property<string>("SsnId")
                         .IsRequired()
