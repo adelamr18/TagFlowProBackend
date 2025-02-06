@@ -20,6 +20,12 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddCors(options =>
 {
+    options.AddPolicy("AllowAllForSwagger", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
     options.AddPolicy("AllowFrontend", policy =>
     {
         policy.WithOrigins(
@@ -38,6 +44,11 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
+
+app.UseWhen(context => context.Request.Path.StartsWithSegments("/swagger"), appBuilder =>
+{
+    appBuilder.UseCors("AllowAllForSwagger");
+});
 
 app.UseCors("AllowFrontend");
 
