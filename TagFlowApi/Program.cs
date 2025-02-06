@@ -7,12 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Update to use PostgreSQL
 builder.Services.AddDbContext<DataContext>(options =>
-options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-
-
-//builder.Services.AddDbContext<DataContext>(options =>
-//options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"), b =>
-//b.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<UserRepository>();
 builder.Services.AddScoped<FileRepository>();
@@ -30,21 +25,17 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3000")
+        policy.WithOrigins("http://localhost:3000", "https://tagflowprobackend-production.up.railway.app")
               .AllowAnyMethod()
               .AllowAnyHeader()
-              .AllowCredentials()
-              .WithMethods("OPTIONS");
+              .AllowCredentials();
     });
 });
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 
