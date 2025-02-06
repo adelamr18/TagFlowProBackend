@@ -42,7 +42,8 @@ namespace TagFlowApi.Controllers
                     token,
                     userType = "Admin",
                     userName = admin.Username,
-                    roleId = admin.RoleId
+                    roleId = admin.RoleId,
+                    userId = admin.AdminId
                 });
             }
 
@@ -62,7 +63,8 @@ namespace TagFlowApi.Controllers
                     token,
                     userType = "User",
                     userName = user.Username,
-                    roleId = user.RoleId
+                    roleId = user.RoleId,
+                    userId = user.UserId
                 });
             }
 

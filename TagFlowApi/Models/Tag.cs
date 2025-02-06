@@ -7,7 +7,7 @@ namespace TagFlowApi.Models
         public string? Description { get; set; }
         public DateTime CreatedAt { get; set; }
         // Foreign key to Admin table (creator of the tag)
-        public int CreatedBy { get; set; }
+        public int? CreatedBy { get; set; }
         public Admin? CreatedByAdmin { get; set; }
         // One-to-many relationship with TagValues
         public ICollection<TagValue> TagValues { get; set; } = new List<TagValue>();

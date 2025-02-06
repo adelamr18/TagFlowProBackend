@@ -12,9 +12,17 @@ namespace TagFlowApi.Models
         public string UploadedByUserName { get; set; } = "";
         public string DownloadLink { get; set; } = "";
         public byte[]? FileContent { get; set; }
+        public int? UserId { get; set; }
+        public bool IsUploadedByAdmin { get; set; } = false;
 
-        // One-to-many relationship with FileTags
+        [ForeignKey("UploadedAdmin")]
+        public int? AdminId { get; set; }
+        public Admin? UploadedAdmin { get; set; }
+        public DateTime FileUploadedOn { get; set; }
+
         public ICollection<FileTag> FileTags { get; set; } = new List<FileTag>();
         public ICollection<FileRow> FileRows { get; set; } = new List<FileRow>();
+        public ICollection<Project> Projects { get; set; } = new List<Project>();
+        public ICollection<PatientType> PatientTypes { get; set; } = new List<PatientType>();
     }
 }

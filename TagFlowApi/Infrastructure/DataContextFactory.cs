@@ -15,7 +15,7 @@ namespace TagFlowApi.Infrastructure
                 .AddJsonFile("appsettings.json")
                 .Build();
 
-            // optionsBuilder.UseSqlServer(configuration.GetConnectionString("DefaultConnection"));
+            //optionsBuilder.UseSqlServer(configuration.GetConnectionString("DefaultConnection"));
             optionsBuilder.UseNpgsql(configuration.GetConnectionString("DefaultConnection"));
 
 

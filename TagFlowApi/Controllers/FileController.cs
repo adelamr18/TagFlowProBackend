@@ -31,7 +31,11 @@ namespace TagFlowApi.Controllers
        [FromForm] string fileStatus,
        [FromForm] int fileRowsCount,
        [FromForm] string uploadedByUserName,
-       [FromForm] string selectedTags,
+       [FromForm] int selectedProjectId,
+       [FromForm] string? selectedPatientTypeIds,
+       [FromForm] int userId,
+       [FromForm] bool isAdmin,
+       [FromForm] string fileUploadedOn,
        [FromForm] IFormFile file)
         {
             try
@@ -41,9 +45,25 @@ namespace TagFlowApi.Controllers
                     return BadRequest(new { success = false, message = "No file provided." });
                 }
 
-                var deserializedTags = string.IsNullOrEmpty(selectedTags)
-                    ? new List<TagDto>()
-                    : JsonConvert.DeserializeObject<List<TagDto>>(selectedTags);
+                using var memory = new MemoryStream();
+                await file.CopyToAsync(memory);
+                memory.Position = 0;
+
+                var ssnIds = await _fileRepository.ExtractSsnIdsFromExcel(memory);
+                foreach (var ssn in ssnIds)
+                {
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(ssn, "^[123]\\d{9}$"))
+                    {
+                        return BadRequest(new { success = false, message = $"Invalid SSN: {ssn}. SSNs must be exactly 10 digits and start with 1, 2, or 3." });
+                    }
+                }
+
+                // Reset memory stream position for the actual file upload
+                memory.Position = 0;
+
+                var patientTypeIds = string.IsNullOrEmpty(selectedPatientTypeIds)
+                    ? new List<int>()
+                    : Newtonsoft.Json.JsonConvert.DeserializeObject<List<int>>(selectedPatientTypeIds);
 
                 var addFileDto = new AddFileDto
                 {
@@ -51,14 +71,17 @@ namespace TagFlowApi.Controllers
                     FileStatus = fileStatus,
                     FileRowsCount = fileRowsCount,
                     UploadedByUserName = uploadedByUserName,
-                    SelectedTags = deserializedTags,
-                    File = file
+                    SelectedProjectId = selectedProjectId,
+                    SelectedPatientTypeIds = patientTypeIds,
+                    UserId = userId,
+                    IsAdmin = isAdmin,
+                    File = file,
+                    FileUploadedOn = string.IsNullOrWhiteSpace(fileUploadedOn) ? DateTime.UtcNow : DateTime.Parse(fileUploadedOn)
                 };
 
-                using (var fileStream = file.OpenReadStream())
+                using (var fileStream = new MemoryStream(memory.ToArray()))
                 {
                     var (fileName, fileId) = await _fileRepository.UploadFileAsync(addFileDto, fileStream);
-
                     if (!string.IsNullOrEmpty(fileName))
                     {
                         return Ok(new
@@ -69,7 +92,6 @@ namespace TagFlowApi.Controllers
                             message = "File uploaded successfully! You can download the merged file using the provided file name."
                         });
                     }
-
                     return Ok(new { success = true, message = "File uploaded successfully. You can find the downloaded file in the file status table" });
                 }
             }
@@ -147,11 +169,6 @@ namespace TagFlowApi.Controllers
             try
             {
                 var files = await _fileRepository.GetAllFilesAsync();
-
-                if (files == null || !files.Any())
-                {
-                    return NotFound(new { success = false, message = "No files found." });
-                }
 
                 return Ok(new { success = true, files });
             }

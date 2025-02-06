@@ -13,8 +13,8 @@ using TagFlowApi.Infrastructure;
 namespace TagFlowApi.Migrations
 {
     [DbContext(typeof(DataContext))]
-    [Migration("20250131154143_InitialMigration")]
-    partial class InitialMigration
+    [Migration("20250206142737_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -26,6 +26,36 @@ namespace TagFlowApi.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("FilePatientType", b =>
+                {
+                    b.Property<int>("FilesFileId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PatientTypesPatientTypeId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("FilesFileId", "PatientTypesPatientTypeId");
+
+                    b.HasIndex("PatientTypesPatientTypeId");
+
+                    b.ToTable("FilePatientTypes", (string)null);
+                });
+
+            modelBuilder.Entity("FileProject", b =>
+                {
+                    b.Property<int>("FilesFileId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProjectsProjectId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("FilesFileId", "ProjectsProjectId");
+
+                    b.HasIndex("ProjectsProjectId");
+
+                    b.ToTable("FileProjects", (string)null);
+                });
+
             modelBuilder.Entity("TagFlowApi.Models.Admin", b =>
                 {
                     b.Property<int>("AdminId")
@@ -34,8 +64,8 @@ namespace TagFlowApi.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("AdminId"));
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamptz");
 
                     b.Property<string>("CreatedBy")
                         .IsRequired()
@@ -73,6 +103,39 @@ namespace TagFlowApi.Migrations
                     b.ToTable("Admins");
                 });
 
+            modelBuilder.Entity("TagFlowApi.Models.ExpiredSsnIds", b =>
+                {
+                    b.Property<int>("ExpiredSsnId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("ExpiredSsnId"));
+
+                    b.Property<string>("ExpiredAt")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("FileId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FileRowId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FileRowInsuranceExpiryDate")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SsnId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("ExpiredSsnId");
+
+                    b.HasIndex("FileId");
+
+                    b.ToTable("ExpiredSsnIds");
+                });
+
             modelBuilder.Entity("TagFlowApi.Models.File", b =>
                 {
                     b.Property<int>("FileId")
@@ -80,6 +143,9 @@ namespace TagFlowApi.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("FileId"));
+
+                    b.Property<int?>("AdminId")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -102,6 +168,12 @@ namespace TagFlowApi.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime>("FileUploadedOn")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsUploadedByAdmin")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("UploadedByUserName")
                         .IsRequired()
                         .HasColumnType("text");
@@ -110,6 +182,8 @@ namespace TagFlowApi.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("FileId");
+
+                    b.HasIndex("AdminId");
 
                     b.HasIndex("UserId");
 
@@ -221,6 +295,59 @@ namespace TagFlowApi.Migrations
                     b.ToTable("FileTags");
                 });
 
+            modelBuilder.Entity("TagFlowApi.Models.PatientType", b =>
+                {
+                    b.Property<int>("PatientTypeId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("PatientTypeId"));
+
+                    b.Property<string>("CreatedByAdminEmail")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("PatientTypeId");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("PatientTypes");
+                });
+
+            modelBuilder.Entity("TagFlowApi.Models.Project", b =>
+                {
+                    b.Property<int>("ProjectId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("ProjectId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProjectName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("ProjectId");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.ToTable("Projects");
+                });
+
             modelBuilder.Entity("TagFlowApi.Models.Role", b =>
                 {
                     b.Property<int>("RoleId")
@@ -232,7 +359,7 @@ namespace TagFlowApi.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("CreatedBy")
+                    b.Property<int?>("CreatedBy")
                         .HasColumnType("integer");
 
                     b.Property<string>("RoleName")
@@ -261,7 +388,7 @@ namespace TagFlowApi.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("CreatedBy")
+                    b.Property<int?>("CreatedBy")
                         .HasColumnType("integer");
 
                     b.Property<string>("Description")
@@ -293,10 +420,10 @@ namespace TagFlowApi.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("CreatedBy")
+                    b.Property<int?>("CreatedBy")
                         .HasColumnType("integer");
 
-                    b.Property<int>("TagId")
+                    b.Property<int?>("TagId")
                         .HasColumnType("integer");
 
                     b.Property<string>("Value")
@@ -323,7 +450,7 @@ namespace TagFlowApi.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("CreatedBy")
+                    b.Property<int?>("CreatedBy")
                         .HasColumnType("integer");
 
                     b.Property<string>("Email")
@@ -334,7 +461,7 @@ namespace TagFlowApi.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("RoleId")
+                    b.Property<int?>("RoleId")
                         .HasColumnType("integer");
 
                     b.Property<string>("UpdatedBy")
@@ -357,6 +484,29 @@ namespace TagFlowApi.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("TagFlowApi.Models.UserProjectPermission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("ProjectId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserProjectPermissions");
+                });
+
             modelBuilder.Entity("TagFlowApi.Models.UserTagPermission", b =>
                 {
                     b.Property<int>("UserId")
@@ -375,11 +525,59 @@ namespace TagFlowApi.Migrations
                     b.ToTable("UserTagPermissions");
                 });
 
+            modelBuilder.Entity("FilePatientType", b =>
+                {
+                    b.HasOne("TagFlowApi.Models.File", null)
+                        .WithMany()
+                        .HasForeignKey("FilesFileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TagFlowApi.Models.PatientType", null)
+                        .WithMany()
+                        .HasForeignKey("PatientTypesPatientTypeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("FileProject", b =>
+                {
+                    b.HasOne("TagFlowApi.Models.File", null)
+                        .WithMany()
+                        .HasForeignKey("FilesFileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TagFlowApi.Models.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectsProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TagFlowApi.Models.ExpiredSsnIds", b =>
+                {
+                    b.HasOne("TagFlowApi.Models.File", "File")
+                        .WithMany()
+                        .HasForeignKey("FileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("File");
+                });
+
             modelBuilder.Entity("TagFlowApi.Models.File", b =>
                 {
+                    b.HasOne("TagFlowApi.Models.Admin", "UploadedAdmin")
+                        .WithMany("Files")
+                        .HasForeignKey("AdminId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("TagFlowApi.Models.User", null)
                         .WithMany("Files")
                         .HasForeignKey("UserId");
+
+                    b.Navigation("UploadedAdmin");
                 });
 
             modelBuilder.Entity("TagFlowApi.Models.FileRow", b =>
@@ -387,7 +585,7 @@ namespace TagFlowApi.Migrations
                     b.HasOne("TagFlowApi.Models.File", "File")
                         .WithMany("FileRows")
                         .HasForeignKey("FileId")
-                        .OnDelete(DeleteBehavior.SetNull)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("File");
@@ -398,13 +596,13 @@ namespace TagFlowApi.Migrations
                     b.HasOne("TagFlowApi.Models.File", "File")
                         .WithMany("FileTags")
                         .HasForeignKey("FileId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("TagFlowApi.Models.Tag", "Tag")
                         .WithMany("FileTags")
                         .HasForeignKey("TagId")
-                        .OnDelete(DeleteBehavior.SetNull)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("TagFlowApi.Models.TagValue", null)
@@ -416,13 +614,22 @@ namespace TagFlowApi.Migrations
                     b.Navigation("Tag");
                 });
 
+            modelBuilder.Entity("TagFlowApi.Models.Project", b =>
+                {
+                    b.HasOne("TagFlowApi.Models.Admin", "CreatedByAdmin")
+                        .WithMany("Projects")
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreatedByAdmin");
+                });
+
             modelBuilder.Entity("TagFlowApi.Models.Role", b =>
                 {
                     b.HasOne("TagFlowApi.Models.Admin", "CreatedByAdmin")
                         .WithMany("Roles")
                         .HasForeignKey("CreatedBy")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.Navigation("CreatedByAdmin");
                 });
@@ -432,8 +639,7 @@ namespace TagFlowApi.Migrations
                     b.HasOne("TagFlowApi.Models.Admin", "CreatedByAdmin")
                         .WithMany("Tags")
                         .HasForeignKey("CreatedBy")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("CreatedByAdmin");
                 });
@@ -443,14 +649,12 @@ namespace TagFlowApi.Migrations
                     b.HasOne("TagFlowApi.Models.Admin", "CreatedByAdmin")
                         .WithMany("TagValues")
                         .HasForeignKey("CreatedBy")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("TagFlowApi.Models.Tag", "Tag")
                         .WithMany("TagValues")
                         .HasForeignKey("TagId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("CreatedByAdmin");
 
@@ -462,18 +666,33 @@ namespace TagFlowApi.Migrations
                     b.HasOne("TagFlowApi.Models.Admin", "CreatedByAdmin")
                         .WithMany("Users")
                         .HasForeignKey("CreatedBy")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("TagFlowApi.Models.Role", "Role")
                         .WithMany("Users")
                         .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.Navigation("CreatedByAdmin");
 
                     b.Navigation("Role");
+                });
+
+            modelBuilder.Entity("TagFlowApi.Models.UserProjectPermission", b =>
+                {
+                    b.HasOne("TagFlowApi.Models.Project", "Project")
+                        .WithMany("UserProjectPermissions")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TagFlowApi.Models.User", "User")
+                        .WithMany("UserProjectPermissions")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Project");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("TagFlowApi.Models.UserTagPermission", b =>
@@ -481,13 +700,13 @@ namespace TagFlowApi.Migrations
                     b.HasOne("TagFlowApi.Models.Tag", "Tag")
                         .WithMany("UserTagPermissions")
                         .HasForeignKey("TagId")
-                        .OnDelete(DeleteBehavior.SetNull)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("TagFlowApi.Models.User", "User")
                         .WithMany("UserTagPermissions")
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.SetNull)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Tag");
@@ -497,6 +716,10 @@ namespace TagFlowApi.Migrations
 
             modelBuilder.Entity("TagFlowApi.Models.Admin", b =>
                 {
+                    b.Navigation("Files");
+
+                    b.Navigation("Projects");
+
                     b.Navigation("Roles");
 
                     b.Navigation("TagValues");
@@ -511,6 +734,11 @@ namespace TagFlowApi.Migrations
                     b.Navigation("FileRows");
 
                     b.Navigation("FileTags");
+                });
+
+            modelBuilder.Entity("TagFlowApi.Models.Project", b =>
+                {
+                    b.Navigation("UserProjectPermissions");
                 });
 
             modelBuilder.Entity("TagFlowApi.Models.Role", b =>
@@ -535,6 +763,8 @@ namespace TagFlowApi.Migrations
             modelBuilder.Entity("TagFlowApi.Models.User", b =>
                 {
                     b.Navigation("Files");
+
+                    b.Navigation("UserProjectPermissions");
 
                     b.Navigation("UserTagPermissions");
                 });

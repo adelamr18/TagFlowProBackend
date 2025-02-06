@@ -76,7 +76,7 @@ namespace TagFlowApi.Repositories
                 CreatedByAdminEmail = u.CreatedByAdmin != null ? u.CreatedByAdmin.Email : "",
                 CreatedByAdminName = u.CreatedByAdmin != null ? u.CreatedByAdmin.Username : "",
                 RoleName = u.Role.RoleName,
-                RoleId = u.RoleId,
+                RoleId = u.RoleId ?? 0,
                 AssignedTags = u.UserTagPermissions?.Select(utp => utp.Tag.TagName ?? "").ToList() ?? [],
                 UpdatedBy = u.UpdatedBy
             })
@@ -145,7 +145,7 @@ namespace TagFlowApi.Repositories
                         Value = v,
                         TagId = tag.TagId,
                         CreatedAt = DateTime.UtcNow,
-                        CreatedBy = tag.CreatedBy
+                        CreatedBy = tag.CreatedBy ?? 0
                     })
                     .ToList();
 
@@ -556,6 +556,121 @@ namespace TagFlowApi.Repositories
             }
         }
 
+        public async Task<List<ProjectDto>> GetAllProjectsAsync()
+        {
+            var projects = await _context.Projects
+                .Include(p => p.CreatedByAdmin)
+                .Include(p => p.UserProjectPermissions)
+                .ToListAsync();
+            var projectDtos = projects.Select(p => new ProjectDto
+            {
+                ProjectId = p.ProjectId ?? 0,
+                ProjectName = p.ProjectName,
+                CreatedAt = p.CreatedAt,
+                CreatedByAdminEmail = p.CreatedByAdmin != null ? p.CreatedByAdmin.Email : "",
+                AssignedUserIds = p.UserProjectPermissions.Select(upp => upp.UserId.HasValue ? upp.UserId.Value : 0)
+                                      .Where(id => id != 0)
+                                      .ToList()
+            }).ToList();
+            return projectDtos;
+        }
+
+        public async Task<bool> UpdateProjectAsync(ProjectUpdateDto dto)
+        {
+            var project = await _context.Projects
+                .Include(p => p.UserProjectPermissions)
+                    .ThenInclude(upp => upp.User)
+                .AsSplitQuery()
+                .FirstOrDefaultAsync(p => p.ProjectId == dto.ProjectId);
+            if (project == null)
+                throw new Exception($"Project with ID {dto.ProjectId} not found.");
+            project.ProjectName = dto.ProjectName;
+            project.UpdatedBy = dto.UpdatedBy;
+            var currentUserIds = project.UserProjectPermissions
+                .Where(upp => upp.UserId.HasValue)
+                .Select(upp => upp.UserId.Value)
+                .ToHashSet();
+            var newUserIds = dto.AssignedUserIds.ToHashSet();
+            var toRemove = project.UserProjectPermissions
+                .Where(upp => upp.UserId.HasValue && !newUserIds.Contains(upp.UserId.Value))
+                .ToList();
+            _context.UserProjectPermissions.RemoveRange(toRemove);
+            var toAdd = newUserIds.Except(currentUserIds);
+            foreach (var userId in toAdd)
+            {
+                project.UserProjectPermissions.Add(new UserProjectPermission { UserId = userId });
+            }
+            try
+            {
+                _context.Projects.Update(project);
+                await _context.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error updating project: {ex.Message}");
+                return false;
+            }
+        }
+
+        // File: TagFlowApi/Repositories/AdminRepository.cs
+        public async Task<bool> DeleteProjectAsync(int projectId)
+        {
+            var project = await _context.Projects
+                .Include(p => p.UserProjectPermissions)
+                .Include(p => p.Files)
+                .FirstOrDefaultAsync(p => p.ProjectId == projectId);
+            if (project == null)
+                throw new Exception($"Project with ID {projectId} not found.");
+            _context.UserProjectPermissions.RemoveRange(project.UserProjectPermissions);
+            project.Files.Clear();
+            _context.Projects.Remove(project);
+            try
+            {
+                await _context.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error deleting project: {ex.Message}");
+                return false;
+            }
+        }
+
+        public async Task<bool> AddNewProjectAsync(ProjectDto projectCreateDto, string createdByAdminEmail)
+        {
+            try
+            {
+                var admin = await _context.Admins.FirstOrDefaultAsync(a => a.Email == createdByAdminEmail);
+                if (admin == null)
+                    throw new Exception("Admin not found.");
+                var project = new Project
+                {
+                    ProjectName = projectCreateDto.ProjectName,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = admin.AdminId
+                };
+                if (projectCreateDto.AssignedUserIds != null && projectCreateDto.AssignedUserIds.Any())
+                {
+                    foreach (var userId in projectCreateDto.AssignedUserIds)
+                    {
+                        project.UserProjectPermissions.Add(new UserProjectPermission
+                        {
+                            UserId = userId
+                        });
+                    }
+                }
+                await _context.Projects.AddAsync(project);
+                await _context.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+
         public async Task<bool> DeleteAdminAsync(int adminId)
         {
             var admin = await _context.Admins
@@ -579,5 +694,79 @@ namespace TagFlowApi.Repositories
                 return false;
             }
         }
+
+        public async Task<bool> AddNewPatientTypeAsync(PatientTypeCreateDto dto, string createdByAdminEmail)
+        {
+            try
+            {
+                var admin = await _context.Admins.FirstOrDefaultAsync(a => a.Email == createdByAdminEmail);
+                if (admin == null)
+                    throw new Exception("Admin not found.");
+
+                var patientType = new PatientType
+                {
+                    Name = dto.Name,
+                    CreatedByAdminEmail = admin.Email
+                };
+
+                await _context.PatientTypes.AddAsync(patientType);
+                await _context.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        public async Task<List<PatientTypeDto>> GetAllPatientTypesAsync()
+        {
+            var types = await _context.PatientTypes.ToListAsync();
+            var dtos = types.Select(t => new PatientTypeDto
+            {
+                PatientTypeId = t.PatientTypeId,
+                Name = t.Name,
+                CreatedAt = DateTime.UtcNow,
+                CreatedByAdminEmail = t.CreatedByAdminEmail
+            }).ToList();
+            return dtos;
+        }
+
+        public async Task<bool> UpdatePatientTypeAsync(PatientTypeUpdateDto dto)
+        {
+            try
+            {
+                var patientType = await _context.PatientTypes.FirstOrDefaultAsync(pt => pt.PatientTypeId == dto.PatientTypeId);
+                if (patientType == null)
+                    throw new Exception($"PatientType with ID {dto.PatientTypeId} not found.");
+                patientType.Name = dto.Name;
+                _context.PatientTypes.Update(patientType);
+                await _context.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        public async Task<bool> DeletePatientTypeAsync(int patientTypeId)
+        {
+            try
+            {
+                var patientType = await _context.PatientTypes.FirstOrDefaultAsync(pt => pt.PatientTypeId == patientTypeId);
+                if (patientType == null)
+                    throw new Exception($"PatientType with ID {patientTypeId} not found.");
+                _context.PatientTypes.Remove(patientType);
+                await _context.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+
     }
 }

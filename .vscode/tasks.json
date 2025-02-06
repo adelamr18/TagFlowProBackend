@@ -1,0 +1,18 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build", // This label is what the `launch.json` will reference.
+      "type": "shell", // Use "shell" to run command-line tasks.
+      "command": "dotnet build", // The command to run: dotnet build
+      "group": {
+        "kind": "build",
+        "isDefault": true // Make this the default build task.
+      },
+      "problemMatcher": [
+        "$msCompile" // Match compile errors (if any) from dotnet build.
+      ],
+      "detail": "Build the .NET application" // A short description of the task.
+    }
+  ]
+}

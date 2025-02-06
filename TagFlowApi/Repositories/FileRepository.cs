@@ -3,7 +3,6 @@ using TagFlowApi.Models;
 using TagFlowApi.Infrastructure;
 using TagFlowApi.DTOs;
 using Microsoft.EntityFrameworkCore;
-
 using File = TagFlowApi.Models.File;
 using TagFlowApi.Hubs;
 using Microsoft.AspNetCore.SignalR;
@@ -15,6 +14,7 @@ namespace TagFlowApi.Repositories
         private readonly DataContext _context;
         private static readonly string SSN_COLUMN = "ssn";
         private static readonly string PROCESSED_STATUS = "Processed";
+        private static readonly string PROCESSED_WITH_ERROR = "Processed_with_error";
         private static readonly string PROCESSING_STATUS = "Processing";
         private static readonly string UNPROCESSED_STATUS = "Unprocessed";
         private static readonly string BASE_URL = "http://localhost:5500";
@@ -50,12 +50,10 @@ namespace TagFlowApi.Repositories
             }
 
             byte[] fileContent;
-
             if (fileStream.CanSeek)
             {
                 fileStream.Position = 0;
             }
-
             using (var memoryStream = new MemoryStream())
             {
                 await fileStream.CopyToAsync(memoryStream);
@@ -69,27 +67,39 @@ namespace TagFlowApi.Repositories
                 FileStatus = fileDto.FileStatus,
                 FileRowsCounts = ssnIds.Count,
                 UploadedByUserName = fileDto.UploadedByUserName,
-                FileContent = fileContent
+                FileContent = fileContent,
+                IsUploadedByAdmin = fileDto.IsAdmin,
+                FileUploadedOn = fileDto.FileUploadedOn
             };
+
+            if (fileDto.IsAdmin)
+            {
+                var admin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminId == fileDto.UserId);
+                if (admin == null)
+                    throw new Exception("Admin user not found in Admins table.");
+                newFile.AdminId = admin.AdminId;
+            }
+            else
+            {
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == fileDto.UserId);
+                if (user == null)
+                    throw new Exception("User not found.");
+                newFile.UserId = user.UserId;
+                newFile.AdminId = null;
+            }
 
             _context.Files.Add(newFile);
             await _context.SaveChangesAsync();
 
             var existingDuplicates = await GetDuplicateSSNsAsync(ssnIds);
-
             var existingSsnMap = existingDuplicates
                 .GroupBy(d => d.SsnId)
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.Any(d => d.Status == PROCESSED_STATUS) ? PROCESSED_STATUS : g.First().Status
-                );
-
+                .ToDictionary(g => g.Key, g => g.Any(d => d.Status == PROCESSED_STATUS) ? PROCESSED_STATUS : g.First().Status);
             var fileRows = ssnIds.Select(ssn =>
             {
                 var status = existingSsnMap.TryGetValue(ssn, out var existingStatus) && existingStatus == PROCESSED_STATUS
                     ? PROCESSED_STATUS
                     : UNPROCESSED_STATUS;
-
                 return new FileRow
                 {
                     FileId = newFile.FileId,
@@ -97,17 +107,28 @@ namespace TagFlowApi.Repositories
                     Status = status
                 };
             }).ToList();
-
             _context.FileRows.AddRange(fileRows);
 
-            var fileTags = fileDto.SelectedTags.Select(tag => new FileTag
+            if (fileDto.SelectedProjectId.HasValue)
             {
-                FileId = newFile.FileId,
-                TagId = tag.TagId,
-                TagValuesIds = tag.TagValuesIds
-            });
+                var project = await _context.Projects.FirstOrDefaultAsync(p => p.ProjectId == fileDto.SelectedProjectId.Value);
+                if (project != null && !newFile.Projects.Contains(project))
+                {
+                    newFile.Projects.Add(project);
+                }
+            }
 
-            _context.FileTags.AddRange(fileTags);
+            if (fileDto.SelectedPatientTypeIds != null && fileDto.SelectedPatientTypeIds.Any())
+            {
+                var pts = await _context.PatientTypes.Where(pt => fileDto.SelectedPatientTypeIds.Contains(pt.PatientTypeId)).ToListAsync();
+                foreach (var pt in pts)
+                {
+                    if (!newFile.PatientTypes.Contains(pt))
+                    {
+                        newFile.PatientTypes.Add(pt);
+                    }
+                }
+            }
 
             if (ssnIds.All(ssn => existingSsnMap.TryGetValue(ssn, out var status) && status == PROCESSED_STATUS))
                 newFile.FileStatus = PROCESSED_STATUS;
@@ -115,8 +136,8 @@ namespace TagFlowApi.Repositories
             await _context.SaveChangesAsync();
 
             string? mergedFileName = existingDuplicates.Count > 0
-            ? await GenerateMergedExcelFileAsync(newFile.FileId, fileDto.File)
-            : null;
+                ? await GenerateMergedExcelFileAsync(newFile.FileId, fileDto.File)
+                : null;
             await UpdateFileDownloadLinkAsync(newFile.FileId, mergedFileName);
 
             return (mergedFileName, newFile.FileId);
@@ -157,20 +178,24 @@ namespace TagFlowApi.Repositories
                 : null;
 
             fileRecord.DownloadLink = downloadLink ?? "";
-
             bool allRowsProcessed = await _context.FileRows
                 .Where(fr => fr.FileId == fileId)
-                .AllAsync(fr => fr.Status == PROCESSED_STATUS);
+                .AllAsync(fr => fr.Status.ToLower() == PROCESSED_STATUS.ToLower() ||
+                                  fr.Status.ToLower() == PROCESSED_WITH_ERROR.ToLower());
 
             if (allRowsProcessed)
             {
                 fileRecord.FileStatus = PROCESSED_STATUS;
             }
+            else
+            {
+                fileRecord.FileStatus = UNPROCESSED_STATUS;
+            }
+
 
             _context.Files.Update(fileRecord);
             await _context.SaveChangesAsync();
         }
-
 
         public async Task<List<string>> ExtractSsnIdsFromExcel(Stream fileStream)
         {
@@ -244,123 +269,144 @@ namespace TagFlowApi.Repositories
                 throw;
             }
         }
-
-        public async Task UpdateProcessedDataAsync(int fileId, List<FileRowDto> updates, IHubContext<FileStatusHub> hubContext)
+        public async Task ProcessExpiredSsnIdsAsync(int fileId, IHubContext<FileStatusHub> hubContext)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
-            try
+            var todayString = DateTime.UtcNow.ToString("yyyy-MM-dd");
+            var expiredRows = await _context.FileRows
+       .Where(fr => fr.FileId == fileId &&
+                    !string.IsNullOrEmpty(fr.InsuranceExpiryDate) &&
+                    fr.InsuranceExpiryDate.CompareTo(todayString) < 0)
+       .ToListAsync();
+
+            if (expiredRows.Any())
             {
-                var rowsToUpdate = await _context.FileRows
-                    .Where(fr => fr.FileId == fileId && updates.Select(u => u.FileRowId).Contains(fr.FileRowId))
-                    .ToListAsync();
-
-                if (!rowsToUpdate.Any())
+                foreach (var row in expiredRows)
                 {
-                    throw new Exception("No rows found to update.");
-                }
-
-                foreach (var update in updates)
-                {
-                    var fileRow = rowsToUpdate.FirstOrDefault(fr => fr.FileRowId == update.FileRowId);
-                    if (fileRow != null)
+                    var expiredRecord = new ExpiredSsnIds
                     {
-                        fileRow.Status = PROCESSED_STATUS;
-                        fileRow.SsnId = update.Ssn;
-                        fileRow.InsuranceCompany = update.InsuranceCompany;
-                        fileRow.MedicalNetwork = update.MedicalNetwork;
-                        fileRow.IdentityNumber = update.IdentityNumber;
-                        fileRow.PolicyNumber = update.PolicyNumber;
-                        fileRow.Class = update.Class;
-                        fileRow.DeductIblerate = update.DeductIblerate;
-                        fileRow.MaxLimit = update.MaxLimit;
-                        fileRow.UploadDate = update.UploadDate;
-                        fileRow.InsuranceExpiryDate = update.InsuranceExpiryDate;
-                        fileRow.BeneficiaryType = update.BeneficiaryType;
-                        fileRow.BeneficiaryNumber = update.BeneficiaryNumber;
-                    }
+                        FileRowId = row.FileRowId,
+                        SsnId = row.SsnId,
+                        FileRowInsuranceExpiryDate = DateTime.Parse(row.InsuranceExpiryDate).ToString("yyyy-MM-dd"),
+                        FileId = row.FileId,
+                        ExpiredAt = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")
+                    };
+                    _context.ExpiredSsnIds.Add(expiredRecord);
+                    _context.FileRows.Remove(row);
                 }
 
                 await _context.SaveChangesAsync();
+            }
+        }
 
-                var remainingUnprocessed = await _context.FileRows
-                    .Where(fr => fr.FileId == fileId && fr.Status != PROCESSED_STATUS)
-                    .AnyAsync();
+        public async Task UpdateProcessedDataAsync(int fileId, List<FileRowDto> updates, IHubContext<FileStatusHub> hubContext)
+        {
+            using (var transaction = await _context.Database.BeginTransactionAsync())
+            {
+                var updateIds = updates.Select(u => u.FileRowId).ToList();
+                var rowsToUpdate = await _context.FileRows
+                    .Where(fr => fr.FileId == fileId && updateIds.Contains(fr.FileRowId))
+                    .ToListAsync();
 
-                var file = await _context.Files.FindAsync(fileId);
-                if (file == null)
+                if (!rowsToUpdate.Any())
+                    throw new Exception("No rows found to update.");
+
+                var rowDict = rowsToUpdate.ToDictionary(fr => fr.FileRowId);
+
+                foreach (var update in updates)
                 {
-                    throw new Exception("File not found.");
-                }
-
-                if (!remainingUnprocessed)
-                {
-                    if (file.FileContent != null)
+                    if (rowDict.TryGetValue(update.FileRowId, out var fileRow))
                     {
-                        using (var fileStream = new MemoryStream(file.FileContent))
+                        if (!string.IsNullOrWhiteSpace(update.InsuranceExpiryDate) &&
+                            DateTime.TryParse(update.InsuranceExpiryDate, out var parsedExpiryDate) &&
+                            parsedExpiryDate < DateTime.UtcNow.Date)
                         {
-                            IFormFile newFormFile = ConvertToIFormFile(fileStream, file.FileName);
-
-                            if (!string.IsNullOrEmpty(file.DownloadLink))
+                            var expiredRecord = new ExpiredSsnIds
                             {
-                                byte[] existingFileContent = file.FileContent;
+                                FileRowId = fileRow.FileRowId,
+                                SsnId = update.Ssn,
+                                FileRowInsuranceExpiryDate = parsedExpiryDate.ToString("yyyy-MM-dd"),
+                                FileId = fileRow.FileId,
+                                ExpiredAt = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")
+                            };
+                            _context.ExpiredSsnIds.Add(expiredRecord);
+                            _context.FileRows.Remove(fileRow);
+                        }
+                        else
+                        {
+                            fileRow.Status = update.Status;
+                            fileRow.SsnId = update.Ssn;
+                            fileRow.InsuranceCompany = update.InsuranceCompany;
+                            fileRow.MedicalNetwork = update.MedicalNetwork;
+                            fileRow.IdentityNumber = update.IdentityNumber;
+                            fileRow.PolicyNumber = update.PolicyNumber;
+                            fileRow.Class = update.Class;
+                            fileRow.DeductIblerate = update.DeductIblerate;
+                            fileRow.MaxLimit = update.MaxLimit;
+                            if (!string.IsNullOrWhiteSpace(update.UploadDate) && DateTime.TryParse(update.UploadDate, out var parsedUploadDate))
+                                fileRow.UploadDate = parsedUploadDate.ToString("yyyy-MM-dd");
+                            if (!string.IsNullOrWhiteSpace(update.InsuranceExpiryDate) && DateTime.TryParse(update.InsuranceExpiryDate, out var parsedExpiryDate2))
+                                fileRow.InsuranceExpiryDate = parsedExpiryDate2.ToString("yyyy-MM-dd");
+                            fileRow.BeneficiaryType = update.BeneficiaryType;
+                            fileRow.BeneficiaryNumber = update.BeneficiaryNumber;
+                        }
+                    }
+                }
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
 
-                                using (var existingFileStream = new MemoryStream(existingFileContent))
-                                {
-                                    IFormFile existingFormFile = ConvertToIFormFile(existingFileStream, "ExistingFile.xlsx");
+            var processed = PROCESSED_STATUS.ToLower();
+            var processedWithError = PROCESSED_WITH_ERROR.ToLower();
 
-                                    string tempFilePath = Path.Combine(Path.GetTempPath(), existingFormFile.FileName);
-                                    using (var tempFileStream = new FileStream(tempFilePath, FileMode.Create))
-                                    {
-                                        await existingFormFile.CopyToAsync(tempFileStream);
-                                    }
+            var anyProcessed = await _context.FileRows
+                .Where(fr => fr.FileId == fileId &&
+                    (fr.Status.ToLower() == processed || fr.Status.ToLower() == processedWithError))
+                .AnyAsync();
 
-                                    string mergedFilePath = await GenerateMergedExcelFileAsync(fileId, newFormFile, tempFilePath);
+            var file = await _context.Files.FindAsync(fileId);
+            if (file == null)
+                throw new Exception("File not found.");
 
-                                    if (System.IO.File.Exists(tempFilePath))
-                                    {
-                                        System.IO.File.Exists(tempFilePath);
-                                    }
+            if (anyProcessed)
+            {
+                if (file.FileContent == null)
+                    throw new Exception("The file content is null.");
 
-                                    await UpdateFileDownloadLinkAsync(fileId, mergedFilePath);
-                                }
-                            }
-                            else
+                using (var fileStream = new MemoryStream(file.FileContent))
+                {
+                    IFormFile newFormFile = ConvertToIFormFile(fileStream, file.FileName);
+                    string mergedFilePath;
+                    if (!string.IsNullOrEmpty(file.DownloadLink))
+                    {
+                        using (var existingFileStream = new MemoryStream(file.FileContent))
+                        {
+                            IFormFile existingFormFile = ConvertToIFormFile(existingFileStream, "ExistingFile.xlsx");
+                            string tempFilePath = Path.Combine(Path.GetTempPath(), existingFormFile.FileName);
+                            using (var tempFileStream = new FileStream(tempFilePath, FileMode.Create))
                             {
-                                string mergedFilePath = await GenerateMergedExcelFileAsync(fileId, newFormFile);
-
-                                await UpdateFileDownloadLinkAsync(fileId, mergedFilePath);
+                                await existingFormFile.CopyToAsync(tempFileStream);
                             }
+                            mergedFilePath = await GenerateMergedExcelFileAsync(fileId, newFormFile, tempFilePath);
                         }
                     }
                     else
                     {
-                        throw new Exception("The file content is null.");
+                        mergedFilePath = await GenerateMergedExcelFileAsync(fileId, newFormFile);
                     }
+                    await UpdateFileDownloadLinkAsync(fileId, mergedFilePath);
+                    file.DownloadLink = mergedFilePath;
                 }
-
-                await transaction.CommitAsync();
-                await hubContext.Clients.All.SendAsync("FileStatusUpdated", fileId, file.DownloadLink, file.FileStatus);
             }
-            catch (Exception)
+            else
             {
-                await transaction.RollbackAsync();
-                throw;
+                file.FileStatus = UNPROCESSED_STATUS;
+                await _context.SaveChangesAsync();
             }
+
+            await hubContext.Clients.All.SendAsync("FileStatusUpdated", fileId, file.DownloadLink, file.FileStatus);
         }
 
-        private static async Task<byte[]> DownloadFileContentAsync(string downloadLink)
-        {
-            if (string.IsNullOrEmpty(downloadLink))
-                throw new ArgumentException("Download link cannot be null or empty.", nameof(downloadLink));
 
-            using var httpClient = new HttpClient();
-            var response = await httpClient.GetAsync(downloadLink);
-
-            if (!response.IsSuccessStatusCode)
-                throw new Exception($"Failed to download file from {downloadLink}. Status code: {response.StatusCode}");
-
-            return await response.Content.ReadAsByteArrayAsync();
-        }
 
         private static IFormFile ConvertToIFormFile(MemoryStream memoryStream, string fileName)
         {
@@ -377,14 +423,16 @@ namespace TagFlowApi.Repositories
             };
         }
 
-        private async Task<string> GenerateMergedExcelFileAsync(int fileId, IFormFile originalFile, string existingFilePath = null)
+        private async Task<string> GenerateMergedExcelFileAsync(int fileId, IFormFile originalFile, string existingFilePath = "")
         {
+            // Added "FileRowStatus" as a new column
             var dbHeaders = new[]
             {
-        "InsuranceCompany", "MedicalNetwork", "IdentityNumber",
-        "PolicyNumber", "Class", "DeductIblerate", "MaxLimit",
-        "UploadDate", "InsuranceExpiryDate", "BeneficiaryType", "BeneficiaryNumber"
-    };
+            "InsuranceCompany", "MedicalNetwork", "IdentityNumber",
+            "PolicyNumber", "Class", "DeductIblerate", "MaxLimit",
+            "UploadDate", "InsuranceExpiryDate", "BeneficiaryType", "BeneficiaryNumber",
+            "FileRowStatus"
+          };
 
             var uploadedData = ReadOriginalExcelDataAsync(originalFile);
 
@@ -394,7 +442,8 @@ namespace TagFlowApi.Repositories
                 .ToHashSet();
 
             var dbRows = await _context.FileRows
-                .Where(fr => originalSsnIds.Contains(fr.SsnId) && fr.Status == PROCESSED_STATUS)
+                .Where(fr => originalSsnIds.Contains(fr.SsnId) &&
+                    (fr.Status.ToLower() == PROCESSED_STATUS.ToLower() || fr.Status.ToLower() == PROCESSED_WITH_ERROR.ToLower()))
                 .Distinct()
                 .ToListAsync();
 
@@ -404,9 +453,7 @@ namespace TagFlowApi.Repositories
                 existingData = ReadExcelDataFromFilePathAsync(existingFilePath);
             }
             var mergedData = new List<Dictionary<string, string>>();
-
             mergedData.AddRange(uploadedData);
-
             foreach (var existingRow in existingData)
             {
                 if (existingRow.ContainsKey("ssn") && !originalSsnIds.Contains(existingRow["ssn"]))
@@ -424,7 +471,7 @@ namespace TagFlowApi.Repositories
             var fileName = $"File_{fileId}_Merged.xlsx";
             var filePath = Path.Combine(directoryPath, fileName);
 
-            var package = new ExcelPackage();
+            using var package = new ExcelPackage();
             var worksheet = package.Workbook.Worksheets.Add("Merged Data");
 
             var dynamicHeaders = uploadedData.FirstOrDefault()?.Keys.ToList() ?? new List<string>();
@@ -462,6 +509,7 @@ namespace TagFlowApi.Repositories
                         worksheet.Cells[rowNumber, dynamicHeaders.Count + 9].Value = matchingDbRow.InsuranceExpiryDate;
                         worksheet.Cells[rowNumber, dynamicHeaders.Count + 10].Value = matchingDbRow.BeneficiaryType;
                         worksheet.Cells[rowNumber, dynamicHeaders.Count + 11].Value = matchingDbRow.BeneficiaryNumber;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 12].Value = matchingDbRow.Status;
                     }
                 }
 
@@ -481,7 +529,7 @@ namespace TagFlowApi.Repositories
         }
 
 
-        private List<Dictionary<string, string>> ReadExcelDataFromFilePathAsync(string filePath)
+        private static List<Dictionary<string, string>> ReadExcelDataFromFilePathAsync(string filePath)
         {
             using var package = new ExcelPackage(new FileInfo(filePath));
             var worksheet = package.Workbook.Worksheets.FirstOrDefault();
@@ -507,8 +555,6 @@ namespace TagFlowApi.Repositories
 
             return data;
         }
-
-
 
         private static List<Dictionary<string, string>> ReadOriginalExcelDataAsync(IFormFile file)
         {
@@ -553,10 +599,14 @@ namespace TagFlowApi.Repositories
                     CreatedAt = f.CreatedAt,
                     FileStatus = f.FileStatus,
                     FileRowsCounts = f.FileRowsCounts,
-                    DownloadLink = f.DownloadLink
+                    DownloadLink = f.DownloadLink,
+                    SelectedProjectId = f.Projects.Any() ? f.Projects.Select(p => p.ProjectId).FirstOrDefault() : (int?)null,
+                    SelectedPatientTypeIds = f.PatientTypes.Select(pt => pt.PatientTypeId).ToList(),
+                    UserId = f.UserId ?? 0,
+                    IsAdmin = f.IsUploadedByAdmin,
+                    FileUploadedOn = f.FileUploadedOn
                 })
                 .ToListAsync();
-
             return files;
         }
 
@@ -581,7 +631,5 @@ namespace TagFlowApi.Repositories
                 await _context.SaveChangesAsync();
             }
         }
-
-
     }
 }

@@ -15,8 +15,8 @@ namespace TagFlowApi.Models
         // Foreign key to Role table
         public Role Role { get; set; } = null!;
 
-        public int RoleId { get; set; }
-        public int CreatedBy { get; set; }
+        public int? RoleId { get; set; }
+        public int? CreatedBy { get; set; }
 
         // Foreign key to Admin table (creator of the user)
         public Admin? CreatedByAdmin { get; set; }
@@ -26,6 +26,7 @@ namespace TagFlowApi.Models
         // Many-to-one relationship with files
         public ICollection<File> Files { get; set; } = new List<File>();
         public string UpdatedBy { get; set; } = "";
+        public ICollection<UserProjectPermission> UserProjectPermissions { get; set; } = new List<UserProjectPermission>();
         public bool CheckPassword(string password)
         {
             var hashedPassword = Utils.Helpers.HashPassword(password);

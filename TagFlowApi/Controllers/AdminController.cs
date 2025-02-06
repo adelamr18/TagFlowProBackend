@@ -64,11 +64,6 @@ namespace TagFlowApi.Controllers
         {
             var users = await _adminRepository.GetAllUsers();
 
-            if (!users.Any())
-            {
-                return NotFound(new { message = "No users found." });
-            }
-
             return Ok(new { users });
         }
 
@@ -194,11 +189,6 @@ namespace TagFlowApi.Controllers
         {
             var admins = await _adminRepository.GetAllAdmins();
 
-            if (!admins.Any())
-            {
-                return NotFound(new { message = "No admins found." });
-            }
-
             return Ok(new { admins });
         }
 
@@ -220,7 +210,6 @@ namespace TagFlowApi.Controllers
                 return BadRequest(new { success = false, message = ex.Message });
             }
         }
-
 
         [HttpPut("update-admin/{adminId}")]
         public async Task<IActionResult> UpdateAdmin(int adminId, [FromBody] UpdateAdminDto dto)
@@ -259,5 +248,153 @@ namespace TagFlowApi.Controllers
                 return NotFound(new { message = ex.Message });
             }
         }
+        [HttpPost("add-project")]
+        public async Task<IActionResult> AddProject([FromBody] ProjectDto projectCreateDto)
+        {
+            if (projectCreateDto == null || string.IsNullOrWhiteSpace(projectCreateDto.ProjectName))
+            {
+                return BadRequest(new { message = "Invalid project data." });
+            }
+            if (string.IsNullOrWhiteSpace(projectCreateDto.CreatedByAdminEmail))
+            {
+                return BadRequest(new { message = "Admin email is required." });
+            }
+            try
+            {
+                var created = await _adminRepository.AddNewProjectAsync(projectCreateDto, projectCreateDto.CreatedByAdminEmail);
+                if (created)
+                {
+                    return Ok(new { success = true });
+                }
+                else
+                {
+                    return BadRequest(new { success = false, message = "Project creation failed." });
+                }
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("get-all-projects")]
+        public async Task<IActionResult> GetAllProjects()
+        {
+            var projects = await _adminRepository.GetAllProjectsAsync();
+            return Ok(new { projects });
+        }
+
+
+        [HttpPut("update-project")]
+        public async Task<IActionResult> UpdateProject([FromBody] ProjectUpdateDto dto)
+        {
+            if (dto == null || dto.ProjectId <= 0 || string.IsNullOrWhiteSpace(dto.ProjectName))
+                return BadRequest(new { message = "Invalid project data." });
+            try
+            {
+                var success = await _adminRepository.UpdateProjectAsync(dto);
+                if (success)
+                    return Ok(new { message = "Project updated successfully." });
+                return StatusCode(500, new { message = "Failed to update project." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = ex.Message });
+            }
+        }
+
+        [HttpDelete("delete-project/{projectId}")]
+        public async Task<IActionResult> DeleteProject(int projectId)
+        {
+            try
+            {
+                var success = await _adminRepository.DeleteProjectAsync(projectId);
+                if (success)
+                    return Ok(new { message = "Project deleted successfully." });
+                return StatusCode(500, new { message = "Failed to delete project." });
+            }
+            catch (Exception ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("add-patient-type")]
+        public async Task<IActionResult> AddPatientType([FromBody] PatientTypeCreateDto dto)
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.Name) || string.IsNullOrWhiteSpace(dto.CreatedByAdminEmail))
+            {
+                return BadRequest(new { message = "Invalid patient type data." });
+            }
+            try
+            {
+                var success = await _adminRepository.AddNewPatientTypeAsync(dto, dto.CreatedByAdminEmail);
+                if (success)
+                {
+                    return Ok(new { success = true });
+                }
+                else
+                {
+                    return BadRequest(new { success = false, message = "Failed to add patient type." });
+                }
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("get-all-patient-types")]
+        public async Task<IActionResult> GetAllPatientTypes()
+        {
+            try
+            {
+                var types = await _adminRepository.GetAllPatientTypesAsync();
+                if (types == null || !types.Any())
+                    return Ok(new { patientTypes = new List<object>(), message = "No patient types found." });
+                return Ok(new { patientTypes = types });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "An error occurred while retrieving patient types.", error = ex.Message });
+            }
+        }
+
+        [HttpPut("update-patient-type")]
+        public async Task<IActionResult> UpdatePatientType([FromBody] PatientTypeUpdateDto dto)
+        {
+            if (dto == null || dto.PatientTypeId <= 0 || string.IsNullOrWhiteSpace(dto.Name) || string.IsNullOrWhiteSpace(dto.UpdatedBy))
+                return BadRequest(new { message = "Invalid patient type data." });
+            try
+            {
+                var success = await _adminRepository.UpdatePatientTypeAsync(dto);
+                if (success)
+                    return Ok(new { message = "Patient type updated successfully." });
+                return StatusCode(500, new { message = "Failed to update patient type." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = ex.Message });
+            }
+        }
+
+        [HttpDelete("delete-patient-type/{patientTypeId}")]
+        public async Task<IActionResult> DeletePatientType(int patientTypeId)
+        {
+            try
+            {
+                var success = await _adminRepository.DeletePatientTypeAsync(patientTypeId);
+                if (success)
+                    return Ok(new { message = "Patient type deleted successfully." });
+                return StatusCode(500, new { message = "Failed to delete patient type." });
+            }
+            catch (Exception ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+        }
+
     }
+
 }
+
