@@ -343,9 +343,9 @@ namespace TagFlowApi.Repositories
                             fileRow.DeductIblerate = update.DeductIblerate;
                             fileRow.MaxLimit = update.MaxLimit;
                             if (!string.IsNullOrWhiteSpace(update.UploadDate) && DateTime.TryParse(update.UploadDate, out var parsedUploadDate))
-                                fileRow.UploadDate = parsedUploadDate.ToString("yyyy-MM-dd");
-                            if (!string.IsNullOrWhiteSpace(update.InsuranceExpiryDate) && DateTime.TryParse(update.InsuranceExpiryDate, out var parsedExpiryDate2))
-                                fileRow.InsuranceExpiryDate = parsedExpiryDate2.ToString("yyyy-MM-dd");
+                                fileRow.UploadDate = parsedUploadDate.ToUniversalTime().ToString("yyyy-MM-dd");
+                            if (!string.IsNullOrWhiteSpace(update.InsuranceExpiryDate) && DateTime.TryParse(update.InsuranceExpiryDate, out var parsedExpiryDateForRow))
+                                fileRow.InsuranceExpiryDate = parsedExpiryDateForRow.ToUniversalTime().ToString("yyyy-MM-dd");
                             fileRow.BeneficiaryType = update.BeneficiaryType;
                             fileRow.BeneficiaryNumber = update.BeneficiaryNumber;
                         }
