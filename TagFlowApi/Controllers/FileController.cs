@@ -76,7 +76,9 @@ namespace TagFlowApi.Controllers
                     UserId = userId,
                     IsAdmin = isAdmin,
                     File = file,
-                    FileUploadedOn = string.IsNullOrWhiteSpace(fileUploadedOn) ? DateTime.UtcNow : DateTime.Parse(fileUploadedOn)
+                    FileUploadedOn = string.IsNullOrWhiteSpace(fileUploadedOn)
+           ? DateTime.UtcNow
+           : DateTime.Parse(fileUploadedOn).ToUniversalTime()
                 };
 
                 using (var fileStream = new MemoryStream(memory.ToArray()))

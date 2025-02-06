@@ -286,7 +286,7 @@ namespace TagFlowApi.Repositories
                     {
                         FileRowId = row.FileRowId,
                         SsnId = row.SsnId,
-                        FileRowInsuranceExpiryDate = DateTime.Parse(row.InsuranceExpiryDate).ToString("yyyy-MM-dd"),
+                        FileRowInsuranceExpiryDate = DateTime.Parse(row.InsuranceExpiryDate).ToUniversalTime().ToString("yyyy-MM-dd"),
                         FileId = row.FileId,
                         ExpiredAt = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")
                     };
