@@ -28,10 +28,7 @@ builder.Services.AddCors(options =>
     });
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins(
-            "http://localhost:3000",
-            "https://tagflowprobackend-production.up.railway.app",
-            "https://fluffy-chimera-603c00.netlify.app")
+        policy.WithOrigins("http://localhost:3000", "https://fluffy-chimera-603c00.netlify.app")
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
@@ -41,7 +38,10 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 app.UseSwagger();
-app.UseSwaggerUI();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "API V1");
+});
 
 app.UseHttpsRedirection();
 
