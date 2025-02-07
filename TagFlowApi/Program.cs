@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using TagFlowApi.Infrastructure;
 using TagFlowApi.Repositories;
@@ -35,7 +36,14 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+});
+
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 app.UseSwagger();
 app.UseSwaggerUI(c =>
@@ -56,7 +64,6 @@ app.MapHub<FileStatusHub>("/file-status-hub");
 
 app.MapGet("/", () => Results.Redirect("/swagger"));
 app.MapControllers();
-
 app.MapGet("/auth/login", () => Results.Redirect("https://fluffy-chimera-603c00.netlify.app/auth/login"));
 
 app.Run();
