@@ -409,9 +409,6 @@ namespace TagFlowApi.Repositories
             await hubContext.Clients.All.SendAsync("FileStatusUpdated", fileId, file.DownloadLink, file.FileStatus);
         }
 
-
-
-
         private static IFormFile ConvertToIFormFile(MemoryStream memoryStream, string fileName)
         {
             if (memoryStream == null)
@@ -426,21 +423,22 @@ namespace TagFlowApi.Repositories
                 ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             };
         }
-
         private async Task<string> GenerateMergedExcelFileAsync(int fileId, IFormFile originalFile, string existingFilePath = "")
         {
-            // Added "FileRowStatus" as a new column
             var dbHeaders = new[]
             {
             "InsuranceCompany", "MedicalNetwork", "IdentityNumber",
             "PolicyNumber", "Class", "DeductIblerate", "MaxLimit",
-            "UploadDate", "InsuranceExpiryDate", "BeneficiaryType", "BeneficiaryNumber",
-            "FileRowStatus"
-          };
+            "UploadDate", "insuranceExpiryDate", "beneficiaryType", "beneficiaryNumber",
+            "Gender","FileRowStatus"
+            };
 
             var uploadedData = ReadOriginalExcelDataAsync(originalFile);
+            var uploadedDataLower = uploadedData.Select(dict =>
+                dict.ToDictionary(kvp => kvp.Key.ToLower(), kvp => kvp.Value)
+            ).ToList();
 
-            var originalSsnIds = uploadedData
+            var originalSsnIds = uploadedDataLower
                 .Select(row => row.ContainsKey("ssn") ? row["ssn"] : null)
                 .Where(ssn => !string.IsNullOrEmpty(ssn))
                 .ToHashSet();
@@ -455,9 +453,13 @@ namespace TagFlowApi.Repositories
             if (!string.IsNullOrEmpty(existingFilePath) && System.IO.File.Exists(existingFilePath))
             {
                 existingData = ReadExcelDataFromFilePathAsync(existingFilePath);
+                existingData = existingData.Select(dict =>
+                    dict.ToDictionary(kvp => kvp.Key.ToLower(), kvp => kvp.Value)
+                ).ToList();
             }
+
             var mergedData = new List<Dictionary<string, string>>();
-            mergedData.AddRange(uploadedData);
+            mergedData.AddRange(uploadedDataLower);
             foreach (var existingRow in existingData)
             {
                 if (existingRow.ContainsKey("ssn") && !originalSsnIds.Contains(existingRow["ssn"]))
@@ -471,14 +473,13 @@ namespace TagFlowApi.Repositories
             {
                 Directory.CreateDirectory(directoryPath);
             }
-
             var fileName = $"File_{fileId}_Merged.xlsx";
             var filePath = Path.Combine(directoryPath, fileName);
 
             using var package = new ExcelPackage();
             var worksheet = package.Workbook.Worksheets.Add("Merged Data");
 
-            var dynamicHeaders = uploadedData.FirstOrDefault()?.Keys.ToList() ?? new List<string>();
+            var dynamicHeaders = uploadedDataLower.FirstOrDefault()?.Keys.ToList() ?? new List<string>();
             var allHeaders = dynamicHeaders.Concat(dbHeaders).ToList();
 
             for (int col = 0; col < allHeaders.Count; col++)
@@ -513,7 +514,8 @@ namespace TagFlowApi.Repositories
                         worksheet.Cells[rowNumber, dynamicHeaders.Count + 9].Value = matchingDbRow.InsuranceExpiryDate;
                         worksheet.Cells[rowNumber, dynamicHeaders.Count + 10].Value = matchingDbRow.BeneficiaryType;
                         worksheet.Cells[rowNumber, dynamicHeaders.Count + 11].Value = matchingDbRow.BeneficiaryNumber;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 12].Value = matchingDbRow.Status;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 12].Value = matchingDbRow.Gender;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 13].Value = matchingDbRow.Status;
                     }
                 }
 
@@ -531,7 +533,6 @@ namespace TagFlowApi.Repositories
 
             return fileName;
         }
-
 
         private static List<Dictionary<string, string>> ReadExcelDataFromFilePathAsync(string filePath)
         {

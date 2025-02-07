@@ -17,5 +17,6 @@ namespace TagFlowApi.DTOs
         public string InsuranceExpiryDate { get; set; } = "";
         public string BeneficiaryType { get; set; } = "";
         public string BeneficiaryNumber { get; set; } = "";
+        public string Gender { get; set; } = "";
     }
 }
