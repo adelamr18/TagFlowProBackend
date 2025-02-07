@@ -128,11 +128,11 @@ namespace TagFlowApi.Controllers
         }
 
         [HttpPost("update-processed-data")]
-        public async Task<IActionResult> UpdateProcessedData(int fileId, [FromBody] List<FileRowDto> processedFileRows)
+        public async Task<IActionResult> UpdateProcessedData([FromQuery] int fileId, [FromBody] List<FileRowDto> updates)
         {
             try
             {
-                await _fileRepository.UpdateProcessedDataAsync(fileId, processedFileRows, _hubContext);
+                await _fileRepository.UpdateProcessedDataAsync(fileId, updates, _hubContext);
 
                 return Ok(new { success = true, message = "Data updated successfully." });
             }
