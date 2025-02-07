@@ -468,7 +468,7 @@ namespace TagFlowApi.Repositories
                 }
             }
 
-            // Use current directory instead of temp path for Railway compatibility
+            // Write to a file on disk (using current directory for Railway compatibility)
             var directoryPath = Path.Combine(Directory.GetCurrentDirectory(), "MergedFiles");
             if (!Directory.Exists(directoryPath))
             {
@@ -477,61 +477,53 @@ namespace TagFlowApi.Repositories
             var fileName = $"File_{fileId}_Merged.xlsx";
             var filePath = Path.Combine(directoryPath, fileName);
 
-            using var package = new ExcelPackage();
-            var worksheet = package.Workbook.Worksheets.Add("Merged Data");
-
-            var dynamicHeaders = uploadedDataLower.FirstOrDefault()?.Keys.ToList() ?? new List<string>();
-            var allHeaders = dynamicHeaders.Concat(dbHeaders).ToList();
-
-            for (int col = 0; col < allHeaders.Count; col++)
+            using (var package = new ExcelPackage())
             {
-                worksheet.Cells[1, col + 1].Value = allHeaders[col];
-            }
+                var worksheet = package.Workbook.Worksheets.Add("Merged Data");
+                var dynamicHeaders = uploadedDataLower.FirstOrDefault()?.Keys.ToList() ?? new List<string>();
+                var allHeaders = dynamicHeaders.Concat(dbHeaders).ToList();
 
-            int rowNumber = 2;
-            foreach (var row in mergedData)
-            {
-                int colIndex = 1;
-                foreach (var header in dynamicHeaders)
+                // Write header row
+                for (int col = 0; col < allHeaders.Count; col++)
                 {
-                    worksheet.Cells[rowNumber, colIndex].Value = row.ContainsKey(header) ? row[header] : null;
-                    colIndex++;
+                    worksheet.Cells[1, col + 1].Value = allHeaders[col];
                 }
 
-                var ssnId = row.ContainsKey("ssn") ? row["ssn"] : null;
-                if (!string.IsNullOrEmpty(ssnId))
+                int rowNumber = 2;
+                foreach (var row in mergedData)
                 {
-                    var matchingDbRow = dbRows.FirstOrDefault(dbRow => dbRow.SsnId == ssnId);
-                    if (matchingDbRow != null)
+                    int colIndex = 1;
+                    foreach (var header in dynamicHeaders)
                     {
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 1].Value = matchingDbRow.InsuranceCompany;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 2].Value = matchingDbRow.MedicalNetwork;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 3].Value = matchingDbRow.IdentityNumber;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 4].Value = matchingDbRow.PolicyNumber;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 5].Value = matchingDbRow.Class;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 6].Value = matchingDbRow.DeductIblerate;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 7].Value = matchingDbRow.MaxLimit;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 8].Value = matchingDbRow.UploadDate;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 9].Value = matchingDbRow.InsuranceExpiryDate;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 10].Value = matchingDbRow.BeneficiaryType;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 11].Value = matchingDbRow.BeneficiaryNumber;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 12].Value = matchingDbRow.Gender;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 13].Value = matchingDbRow.Status;
+                        worksheet.Cells[rowNumber, colIndex].Value = row.ContainsKey(header) ? row[header] : null;
+                        colIndex++;
                     }
+                    var ssnId = row.ContainsKey("ssn") ? row["ssn"] : null;
+                    if (!string.IsNullOrEmpty(ssnId))
+                    {
+                        var matchingDbRow = dbRows.FirstOrDefault(dbRow => dbRow.SsnId == ssnId);
+                        if (matchingDbRow != null)
+                        {
+                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 1].Value = matchingDbRow.InsuranceCompany;
+                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 2].Value = matchingDbRow.MedicalNetwork;
+                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 3].Value = matchingDbRow.IdentityNumber;
+                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 4].Value = matchingDbRow.PolicyNumber;
+                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 5].Value = matchingDbRow.Class;
+                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 6].Value = matchingDbRow.DeductIblerate;
+                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 7].Value = matchingDbRow.MaxLimit;
+                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 8].Value = matchingDbRow.UploadDate;
+                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 9].Value = matchingDbRow.InsuranceExpiryDate;
+                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 10].Value = matchingDbRow.BeneficiaryType;
+                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 11].Value = matchingDbRow.BeneficiaryNumber;
+                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 12].Value = matchingDbRow.Gender;
+                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 13].Value = matchingDbRow.Status;
+                        }
+                    }
+                    rowNumber++;
                 }
 
-                rowNumber++;
-            }
-
-            try
-            {
                 await package.SaveAsAsync(new FileInfo(filePath));
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error saving file: {ex.Message}");
-            }
-
             return fileName;
         }
 

@@ -150,7 +150,8 @@ namespace TagFlowApi.Controllers
                 return BadRequest("File name is required.");
             }
 
-            var filePath = Path.Combine(_mergedFilesPath, fileName);
+            var mergedFilesPath = Path.Combine(Directory.GetCurrentDirectory(), "MergedFiles");
+            var filePath = Path.Combine(mergedFilesPath, fileName);
 
             if (!System.IO.File.Exists(filePath))
             {
@@ -164,6 +165,7 @@ namespace TagFlowApi.Controllers
 
             return File(fileBytes, contentType, fileName);
         }
+
 
         [HttpGet("get-all-files")]
         public async Task<IActionResult> GetAllFiles()
