@@ -1,14 +1,18 @@
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi.Models;
 using TagFlowApi.Infrastructure;
 using TagFlowApi.Repositories;
 using TagFlowApi.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Update to use PostgreSQL
+// builder.Services.AddDbContext<DataContext>(options =>
+//     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddDbContext<DataContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// Register repositories and services
 builder.Services.AddScoped<UserRepository>();
 builder.Services.AddScoped<FileRepository>();
 builder.Services.AddScoped<AdminRepository>();
@@ -17,53 +21,44 @@ builder.Services.AddSingleton<JwtService>();
 builder.Services.AddSignalR();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
 
-builder.Services.AddCors(options =>
+builder.Services.AddSwaggerGen(c =>
 {
-    options.AddPolicy("AllowAllForSwagger", policy =>
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "TagFlow API", Version = "v1" });
+    c.AddServer(new OpenApiServer
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-    options.AddPolicy("AllowFrontend", policy =>
-    {
-        policy.WithOrigins("http://localhost:3000", "https://fluffy-chimera-603c00.netlify.app")
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials();
+        Url = "https://tagflowprobackend-production.up.railway.app",
+        Description = "Production server"
     });
 });
 
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
+builder.Services.AddCors(options =>
 {
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins(
+                "http://localhost:3000",
+                "https://tagflowprobackend-production.up.railway.app",
+                "https://fluffy-chimera-603c00.netlify.app")
+            .AllowAnyMethod()
+            .AllowAnyHeader();
+    });
 });
 
 var app = builder.Build();
 
-app.UseForwardedHeaders();
-
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "API V1");
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "TagFlow API V1");
 });
 
 app.UseHttpsRedirection();
 
-app.UseWhen(context => context.Request.Path.StartsWithSegments("/swagger"), appBuilder =>
-{
-    appBuilder.UseCors("AllowAllForSwagger");
-});
-
 app.UseCors("AllowFrontend");
 
 app.MapHub<FileStatusHub>("/file-status-hub");
-
 app.MapGet("/", () => Results.Redirect("/swagger"));
 app.MapControllers();
-app.MapGet("/auth/login", () => Results.Redirect("https://fluffy-chimera-603c00.netlify.app/auth/login"));
 
 app.Run();
