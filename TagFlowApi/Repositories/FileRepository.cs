@@ -427,11 +427,11 @@ namespace TagFlowApi.Repositories
         {
             var dbHeaders = new[]
             {
-            "InsuranceCompany", "MedicalNetwork", "IdentityNumber",
-            "PolicyNumber", "Class", "DeductIblerate", "MaxLimit",
-            "UploadDate", "insuranceExpiryDate", "beneficiaryType", "beneficiaryNumber",
-            "Gender","FileRowStatus"
-            };
+        "InsuranceCompany", "MedicalNetwork", "IdentityNumber",
+        "PolicyNumber", "Class", "DeductIblerate", "MaxLimit",
+        "UploadDate", "insuranceExpiryDate", "beneficiaryType", "beneficiaryNumber",
+        "Gender", "FileRowStatus"
+    };
 
             var uploadedData = ReadOriginalExcelDataAsync(originalFile);
             var uploadedDataLower = uploadedData.Select(dict =>
@@ -468,7 +468,8 @@ namespace TagFlowApi.Repositories
                 }
             }
 
-            var directoryPath = Path.Combine(Path.GetTempPath(), "MergedFiles");
+            // Use current directory instead of temp path for Railway compatibility
+            var directoryPath = Path.Combine(Directory.GetCurrentDirectory(), "MergedFiles");
             if (!Directory.Exists(directoryPath))
             {
                 Directory.CreateDirectory(directoryPath);
@@ -533,6 +534,7 @@ namespace TagFlowApi.Repositories
 
             return fileName;
         }
+
 
         private static List<Dictionary<string, string>> ReadExcelDataFromFilePathAsync(string filePath)
         {
