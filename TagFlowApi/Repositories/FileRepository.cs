@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using File = TagFlowApi.Models.File;
 using TagFlowApi.Hubs;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.Mvc;
 
 namespace TagFlowApi.Repositories
 {
@@ -298,7 +299,7 @@ namespace TagFlowApi.Repositories
             }
         }
 
-        public async Task UpdateProcessedDataAsync(int fileId, List<FileRowDto> updates, IHubContext<FileStatusHub> hubContext)
+        public async Task UpdateProcessedDataAsync(int fileId, [FromBody] List<FileRowDto> updates, IHubContext<FileStatusHub> hubContext)
         {
             using (var transaction = await _context.Database.BeginTransactionAsync())
             {
@@ -346,8 +347,8 @@ namespace TagFlowApi.Repositories
                                 DateTime.TryParse(update.UploadDate, out var parsedUploadDate))
                                 fileRow.UploadDate = parsedUploadDate.ToUniversalTime().ToString("yyyy-MM-dd");
                             if (!string.IsNullOrWhiteSpace(update.InsuranceExpiryDate) &&
-                                DateTime.TryParse(update.InsuranceExpiryDate, out var parsedExpiryDateRow))
-                                fileRow.InsuranceExpiryDate = parsedExpiryDateRow.ToUniversalTime().ToString("yyyy-MM-dd");
+                                DateTime.TryParse(update.InsuranceExpiryDate, out var parsedExpiryDateForRow))
+                                fileRow.InsuranceExpiryDate = parsedExpiryDateForRow.ToUniversalTime().ToString("yyyy-MM-dd");
                             fileRow.BeneficiaryType = update.BeneficiaryType;
                             fileRow.BeneficiaryNumber = update.BeneficiaryNumber;
                         }
@@ -408,6 +409,7 @@ namespace TagFlowApi.Repositories
 
             await hubContext.Clients.All.SendAsync("FileStatusUpdated", fileId, file.DownloadLink, file.FileStatus);
         }
+
 
 
 

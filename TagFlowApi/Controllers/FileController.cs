@@ -128,7 +128,7 @@ namespace TagFlowApi.Controllers
         }
 
         [HttpPost("update-processed-data")]
-        public async Task<IActionResult> UpdateProcessedData(int fileId, List<FileRowDto> processedFileRows)
+        public async Task<IActionResult> UpdateProcessedData(int fileId, [FromBody] List<FileRowDto> processedFileRows)
         {
             try
             {
