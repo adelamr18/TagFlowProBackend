@@ -398,7 +398,6 @@ namespace TagFlowApi.Repositories
                         mergedFilePath = await GenerateMergedExcelFileAsync(fileId, newFormFile);
                     }
                     await UpdateFileDownloadLinkAsync(fileId, mergedFilePath);
-                    file.DownloadLink = mergedFilePath;
                 }
             }
             else
