@@ -39,7 +39,7 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(
                 "http://localhost:3000",
                 "https://tagflowprobackend-production.up.railway.app",
-                "https://fluffy-chimera-603c00.netlify.app")
+                "https://glittery-palmier-345ebb.netlify.app")
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials();
