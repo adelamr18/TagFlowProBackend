@@ -41,7 +41,8 @@ builder.Services.AddCors(options =>
                 "https://tagflowprobackend-production.up.railway.app",
                 "https://fluffy-chimera-603c00.netlify.app")
             .AllowAnyMethod()
-            .AllowAnyHeader();
+            .AllowAnyHeader()
+            .AllowCredentials();
     });
 });
 
