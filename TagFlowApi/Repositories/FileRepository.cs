@@ -28,7 +28,7 @@ namespace TagFlowApi.Repositories
         public async Task<List<FileRow>> GetDuplicateSSNsAsync(List<string> ssnIds)
         {
             return await _context.FileRows
-                .Where(fr => (ssnIds.Contains(fr.SsnId) && fr.Status == PROCESSED_STATUS) || ssnIds.Contains(fr.SsnId))
+                .Where(fr => ssnIds.Contains(fr.SsnId) && fr.Status == PROCESSED_STATUS)
                 .ToListAsync();
         }
 
