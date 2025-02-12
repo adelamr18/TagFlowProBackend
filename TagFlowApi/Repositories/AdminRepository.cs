@@ -26,6 +26,70 @@ namespace TagFlowApi.Repositories
             return rolesWithAdmins;
         }
 
+        public async Task<bool> UpdateUserByUsernameAsync(string username, UserUpdateDto userUpdateDto)
+        {
+            if (userUpdateDto == null)
+            {
+                throw new ArgumentException("UserUpdateDto cannot be null.");
+            }
+
+            var user = await _context.Users
+                .Include(u => u.UserTagPermissions)
+                .FirstOrDefaultAsync(u => u.UserId == userUpdateDto.UserId);
+
+            if (user == null)
+            {
+                throw new Exception($"User with username '{username}' not found.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(userUpdateDto.Username))
+            {
+                user.Username = userUpdateDto.Username;
+            }
+
+            try
+            {
+                _context.Users.Update(user);
+                await _context.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error updating user by username: {ex.Message}");
+                return false;
+            }
+        }
+
+        public async Task<bool> UpdateAdminByUsernameAsync(string username, UserUpdateDto userUpdateDto)
+        {
+            if (userUpdateDto == null)
+            {
+                throw new ArgumentException("UserUpdateDto cannot be null.");
+            }
+
+            var admin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminId == userUpdateDto.UserId);
+            if (admin == null)
+            {
+                throw new Exception($"Admin with username '{username}' not found.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(userUpdateDto.Username))
+            {
+                admin.Username = userUpdateDto.Username;
+            }
+
+            try
+            {
+                _context.Admins.Update(admin);
+                await _context.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error updating admin by username: {ex.Message}");
+                return false;
+            }
+        }
 
         public async Task<bool> UpdateRoleNameAsync(int roleId, string newRoleName, string updatedBy)
         {

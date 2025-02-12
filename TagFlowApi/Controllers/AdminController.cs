@@ -121,6 +121,34 @@ namespace TagFlowApi.Controllers
             return Ok(new { message = "Tag deleted successfully." });
         }
 
+        [HttpPut("update-user-by-username/{username}")]
+        public async Task<IActionResult> UpdateUserByUsername(string username, [FromBody] UserUpdateDto dto)
+        {
+            if (dto == null)
+            {
+                return BadRequest("Invalid input data.");
+            }
+
+            if (dto.RoleId.HasValue && dto.RoleId.Value == 1)
+            {
+                var success = await _adminRepository.UpdateAdminByUsernameAsync(username, dto);
+                if (!success)
+                {
+                    return StatusCode(500, "An error occurred while updating the admin.");
+                }
+                return Ok(new { message = "Admin updated successfully." });
+            }
+            else
+            {
+                var success = await _adminRepository.UpdateUserByUsernameAsync(username, dto);
+                if (!success)
+                {
+                    return StatusCode(500, "An error occurred while updating the user.");
+                }
+                return Ok(new { message = "User updated successfully." });
+            }
+        }
+
         [HttpPut("update-user/{userId}")]
         public async Task<IActionResult> UpdateUser(int userId, [FromBody] UserUpdateDto dto)
         {

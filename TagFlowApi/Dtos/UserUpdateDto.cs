@@ -6,6 +6,6 @@ namespace TagFlowApi.Dtos
         public int? RoleId { get; set; } = null;
         public List<int>? AssignedTagIds { get; set; } = [];
         public string UpdatedBy { get; set; } = "";
+        public int UserId { get; set; } = 0;
     }
 }
-
