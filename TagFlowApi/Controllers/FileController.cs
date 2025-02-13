@@ -200,17 +200,16 @@ namespace TagFlowApi.Controllers
                 return BadRequest(new { success = false, message = ex.Message });
             }
         }
-
         [HttpGet("overview")]
         public async Task<IActionResult> GetOverview(
-        [FromQuery] DateTime? uploadDate,
-        [FromQuery] string? projectName,
-        [FromQuery] string? patientType)
+                  [FromQuery] DateTime? fromDate,
+                  [FromQuery] DateTime? toDate,
+                  [FromQuery] string? projectName,
+                  [FromQuery] string? patientType)
         {
             try
             {
-                var overview = await _fileRepository.GetOverviewAsync(uploadDate, projectName, patientType);
-
+                var overview = await _fileRepository.GetOverviewAsync(fromDate, toDate, projectName, patientType);
                 return Ok(new { success = true, overview });
             }
             catch (Exception ex)
