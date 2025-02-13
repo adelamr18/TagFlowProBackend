@@ -643,9 +643,18 @@ namespace TagFlowApi.Repositories
             var normalizedProjectName = string.IsNullOrWhiteSpace(projectName) ? "" : projectName.ToLower().Replace(" ", "");
             var normalizedPatientType = string.IsNullOrWhiteSpace(patientType) ? "" : patientType.ToLower().Replace(" ", "");
 
+            DateTime? startDate = null;
+            DateTime? endDate = null;
+            if (uploadDate.HasValue)
+            {
+                startDate = uploadDate.Value.Date;
+                endDate = startDate.Value.AddDays(1);
+            }
+
+            // Overview counts (with status filters) for insured, uninsured, Saudi and non-Saudi patients.
             var overviewCounts = await (
                 from f in _context.Files
-                where (uploadDate == null || EF.Functions.DateDiffDay(f.FileUploadedOn, uploadDate.Value) == 0)
+                where (uploadDate == null || (f.FileUploadedOn >= startDate && f.FileUploadedOn < endDate))
                       && (string.IsNullOrEmpty(normalizedProjectName) || f.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName))
                       && (string.IsNullOrEmpty(normalizedPatientType) || f.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType))
                 join fr in _context.FileRows on f.FileId equals fr.FileId
@@ -661,8 +670,9 @@ namespace TagFlowApi.Repositories
                 }
             ).OrderBy(x => x.InsuredPatients).FirstOrDefaultAsync();
 
+            // Total patients per project (across all file statuses)
             var totalFileRowsQuery = from f in _context.Files
-                                     where (uploadDate == null || EF.Functions.DateDiffDay(f.FileUploadedOn, uploadDate.Value) == 0)
+                                     where (uploadDate == null || (f.FileUploadedOn >= startDate && f.FileUploadedOn < endDate))
                                            && (string.IsNullOrEmpty(normalizedProjectName) || f.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName))
                                            && (string.IsNullOrEmpty(normalizedPatientType) || f.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType))
                                      from p in f.Projects
@@ -670,7 +680,7 @@ namespace TagFlowApi.Repositories
                                      select new { ProjectName = p.ProjectName, Count = 1 };
 
             var totalExpiredQuery = from f in _context.Files
-                                    where (uploadDate == null || EF.Functions.DateDiffDay(f.FileUploadedOn, uploadDate.Value) == 0)
+                                    where (uploadDate == null || (f.FileUploadedOn >= startDate && f.FileUploadedOn < endDate))
                                           && (string.IsNullOrEmpty(normalizedProjectName) || f.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName))
                                           && (string.IsNullOrEmpty(normalizedPatientType) || f.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType))
                                     from p in f.Projects
@@ -687,6 +697,7 @@ namespace TagFlowApi.Repositories
             overviewDto.TotalPatientsPerProjectOverview = totalPatientsPerProjectOverview;
             return overviewDto;
         }
+
 
     }
 }
