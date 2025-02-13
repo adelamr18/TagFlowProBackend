@@ -653,20 +653,26 @@ namespace TagFlowApi.Repositories
                 endDate = startDate.Value.AddDays(1);
             }
 
-            // Overview counts (with status filters) for insured, uninsured, Saudi and non-Saudi patients.
+            // Overview counts for insured/uninsured (only for processed rows) and
+            // Saudi/non-Saudi (for all rows regardless of status)
             var overviewCounts = await (
                 from f in _context.Files
                 where (uploadDate == null || (f.FileUploadedOn >= startDate && f.FileUploadedOn < endDate))
                       && (string.IsNullOrEmpty(normalizedProjectName) || f.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName))
                       && (string.IsNullOrEmpty(normalizedPatientType) || f.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType))
                 join fr in _context.FileRows on f.FileId equals fr.FileId
-                where fr.Status == PROCESSED_STATUS || fr.Status == PROCESSED_WITH_ERROR
                 orderby fr.FileRowId
                 group fr by 1 into g
                 select new OverviewDto
                 {
-                    InsuredPatients = g.Sum(fr => !string.IsNullOrEmpty(fr.InsuranceCompany) ? 1 : 0),
-                    NonInsuredPatients = g.Sum(fr => string.IsNullOrEmpty(fr.InsuranceCompany) ? 1 : 0),
+                    // Only count insured/uninsured if status is PROCESSED or PROCESSED_WITH_ERROR.
+                    InsuredPatients = g.Sum(fr => (fr.Status == PROCESSED_STATUS || fr.Status == PROCESSED_WITH_ERROR)
+                                                    ? (!string.IsNullOrEmpty(fr.InsuranceCompany) ? 1 : 0)
+                                                    : 0),
+                    NonInsuredPatients = g.Sum(fr => (fr.Status == PROCESSED_STATUS || fr.Status == PROCESSED_WITH_ERROR)
+                                                       ? (string.IsNullOrEmpty(fr.InsuranceCompany) ? 1 : 0)
+                                                       : 0),
+                    // For Saudi and Non-Saudi, count all rows regardless of status.
                     SaudiPatients = g.Sum(fr => !string.IsNullOrEmpty(fr.SsnId) && fr.SsnId.StartsWith("1") ? 1 : 0),
                     NonSaudiPatients = g.Sum(fr => string.IsNullOrEmpty(fr.SsnId) || !fr.SsnId.StartsWith("1") ? 1 : 0)
                 }
@@ -699,6 +705,7 @@ namespace TagFlowApi.Repositories
             overviewDto.TotalPatientsPerProjectOverview = totalPatientsPerProjectOverview;
             return overviewDto;
         }
+
 
 
 
