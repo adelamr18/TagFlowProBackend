@@ -647,7 +647,9 @@ namespace TagFlowApi.Repositories
             DateTime? endDate = null;
             if (uploadDate.HasValue)
             {
-                startDate = uploadDate.Value.Date;
+                // Get the date part and explicitly mark it as UTC.
+                var localDate = uploadDate.Value.Date;
+                startDate = DateTime.SpecifyKind(localDate, DateTimeKind.Utc);
                 endDate = startDate.Value.AddDays(1);
             }
 
@@ -697,6 +699,7 @@ namespace TagFlowApi.Repositories
             overviewDto.TotalPatientsPerProjectOverview = totalPatientsPerProjectOverview;
             return overviewDto;
         }
+
 
 
     }
