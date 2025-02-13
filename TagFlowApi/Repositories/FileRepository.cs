@@ -28,7 +28,7 @@ namespace TagFlowApi.Repositories
         public async Task<List<FileRow>> GetDuplicateSSNsAsync(List<string> ssnIds)
         {
             return await _context.FileRows
-                .Where(fr => ssnIds.Contains(fr.SsnId) && fr.Status == PROCESSED_STATUS)
+                .Where(fr => (ssnIds.Contains(fr.SsnId) && fr.Status == PROCESSED_STATUS) || ssnIds.Contains(fr.SsnId))
                 .ToListAsync();
         }
 
@@ -427,11 +427,11 @@ namespace TagFlowApi.Repositories
         {
             var dbHeaders = new[]
             {
-        "InsuranceCompany", "MedicalNetwork", "IdentityNumber",
-        "PolicyNumber", "Class", "DeductIblerate", "MaxLimit",
-        "UploadDate", "insuranceExpiryDate", "beneficiaryType", "beneficiaryNumber",
-        "Gender", "FileRowStatus"
-    };
+            "InsuranceCompany", "MedicalNetwork", "IdentityNumber",
+            "PolicyNumber", "Class", "DeductIblerate", "MaxLimit",
+            "UploadDate", "insuranceExpiryDate", "beneficiaryType", "beneficiaryNumber",
+            "Gender","FileRowStatus"
+            };
 
             var uploadedData = ReadOriginalExcelDataAsync(originalFile);
             var uploadedDataLower = uploadedData.Select(dict =>
@@ -468,8 +468,7 @@ namespace TagFlowApi.Repositories
                 }
             }
 
-            // Write to a file on disk (using current directory for Railway compatibility)
-            var directoryPath = Path.Combine(Directory.GetCurrentDirectory(), "MergedFiles");
+            var directoryPath = Path.Combine(Path.GetTempPath(), "MergedFiles");
             if (!Directory.Exists(directoryPath))
             {
                 Directory.CreateDirectory(directoryPath);
@@ -477,56 +476,63 @@ namespace TagFlowApi.Repositories
             var fileName = $"File_{fileId}_Merged.xlsx";
             var filePath = Path.Combine(directoryPath, fileName);
 
-            using (var package = new ExcelPackage())
+            using var package = new ExcelPackage();
+            var worksheet = package.Workbook.Worksheets.Add("Merged Data");
+
+            var dynamicHeaders = uploadedDataLower.FirstOrDefault()?.Keys.ToList() ?? new List<string>();
+            var allHeaders = dynamicHeaders.Concat(dbHeaders).ToList();
+
+            for (int col = 0; col < allHeaders.Count; col++)
             {
-                var worksheet = package.Workbook.Worksheets.Add("Merged Data");
-                var dynamicHeaders = uploadedDataLower.FirstOrDefault()?.Keys.ToList() ?? new List<string>();
-                var allHeaders = dynamicHeaders.Concat(dbHeaders).ToList();
+                worksheet.Cells[1, col + 1].Value = allHeaders[col];
+            }
 
-                // Write header row
-                for (int col = 0; col < allHeaders.Count; col++)
+            int rowNumber = 2;
+            foreach (var row in mergedData)
+            {
+                int colIndex = 1;
+                foreach (var header in dynamicHeaders)
                 {
-                    worksheet.Cells[1, col + 1].Value = allHeaders[col];
+                    worksheet.Cells[rowNumber, colIndex].Value = row.ContainsKey(header) ? row[header] : null;
+                    colIndex++;
                 }
 
-                int rowNumber = 2;
-                foreach (var row in mergedData)
+                var ssnId = row.ContainsKey("ssn") ? row["ssn"] : null;
+                if (!string.IsNullOrEmpty(ssnId))
                 {
-                    int colIndex = 1;
-                    foreach (var header in dynamicHeaders)
+                    var matchingDbRow = dbRows.FirstOrDefault(dbRow => dbRow.SsnId == ssnId);
+                    if (matchingDbRow != null)
                     {
-                        worksheet.Cells[rowNumber, colIndex].Value = row.ContainsKey(header) ? row[header] : null;
-                        colIndex++;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 1].Value = matchingDbRow.InsuranceCompany;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 2].Value = matchingDbRow.MedicalNetwork;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 3].Value = matchingDbRow.IdentityNumber;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 4].Value = matchingDbRow.PolicyNumber;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 5].Value = matchingDbRow.Class;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 6].Value = matchingDbRow.DeductIblerate;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 7].Value = matchingDbRow.MaxLimit;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 8].Value = matchingDbRow.UploadDate;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 9].Value = matchingDbRow.InsuranceExpiryDate;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 10].Value = matchingDbRow.BeneficiaryType;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 11].Value = matchingDbRow.BeneficiaryNumber;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 12].Value = matchingDbRow.Gender;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 13].Value = matchingDbRow.Status;
                     }
-                    var ssnId = row.ContainsKey("ssn") ? row["ssn"] : null;
-                    if (!string.IsNullOrEmpty(ssnId))
-                    {
-                        var matchingDbRow = dbRows.FirstOrDefault(dbRow => dbRow.SsnId == ssnId);
-                        if (matchingDbRow != null)
-                        {
-                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 1].Value = matchingDbRow.InsuranceCompany;
-                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 2].Value = matchingDbRow.MedicalNetwork;
-                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 3].Value = matchingDbRow.IdentityNumber;
-                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 4].Value = matchingDbRow.PolicyNumber;
-                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 5].Value = matchingDbRow.Class;
-                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 6].Value = matchingDbRow.DeductIblerate;
-                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 7].Value = matchingDbRow.MaxLimit;
-                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 8].Value = matchingDbRow.UploadDate;
-                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 9].Value = matchingDbRow.InsuranceExpiryDate;
-                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 10].Value = matchingDbRow.BeneficiaryType;
-                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 11].Value = matchingDbRow.BeneficiaryNumber;
-                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 12].Value = matchingDbRow.Gender;
-                            worksheet.Cells[rowNumber, dynamicHeaders.Count + 13].Value = matchingDbRow.Status;
-                        }
-                    }
-                    rowNumber++;
                 }
 
+                rowNumber++;
+            }
+
+            try
+            {
                 await package.SaveAsAsync(new FileInfo(filePath));
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error saving file: {ex.Message}");
+            }
+
             return fileName;
         }
-
 
         private static List<Dictionary<string, string>> ReadExcelDataFromFilePathAsync(string filePath)
         {
@@ -618,7 +624,8 @@ namespace TagFlowApi.Repositories
                     FileId = f.FileId,
                     FileName = f.FileName
                 })
-                .FirstOrDefaultAsync();
+                .
+                FirstOrDefaultAsync();
         }
 
         public async Task DeleteFileAsync(int fileId)
@@ -630,5 +637,56 @@ namespace TagFlowApi.Repositories
                 await _context.SaveChangesAsync();
             }
         }
+
+        public async Task<OverviewDto> GetOverviewAsync(DateTime? uploadDate, string? projectName, string? patientType)
+        {
+            var normalizedProjectName = string.IsNullOrWhiteSpace(projectName) ? "" : projectName.ToLower().Replace(" ", "");
+            var normalizedPatientType = string.IsNullOrWhiteSpace(patientType) ? "" : patientType.ToLower().Replace(" ", "");
+
+            var overviewCounts = await (
+                from f in _context.Files
+                where (uploadDate == null || EF.Functions.DateDiffDay(f.FileUploadedOn, uploadDate.Value) == 0)
+                      && (string.IsNullOrEmpty(normalizedProjectName) || f.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName))
+                      && (string.IsNullOrEmpty(normalizedPatientType) || f.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType))
+                join fr in _context.FileRows on f.FileId equals fr.FileId
+                where fr.Status == PROCESSED_STATUS || fr.Status == PROCESSED_WITH_ERROR
+                orderby fr.FileRowId
+                group fr by 1 into g
+                select new OverviewDto
+                {
+                    InsuredPatients = g.Sum(fr => !string.IsNullOrEmpty(fr.InsuranceCompany) ? 1 : 0),
+                    NonInsuredPatients = g.Sum(fr => string.IsNullOrEmpty(fr.InsuranceCompany) ? 1 : 0),
+                    SaudiPatients = g.Sum(fr => !string.IsNullOrEmpty(fr.SsnId) && fr.SsnId.StartsWith("1") ? 1 : 0),
+                    NonSaudiPatients = g.Sum(fr => string.IsNullOrEmpty(fr.SsnId) || !fr.SsnId.StartsWith("1") ? 1 : 0)
+                }
+            ).OrderBy(x => x.InsuredPatients).FirstOrDefaultAsync();
+
+            var totalFileRowsQuery = from f in _context.Files
+                                     where (uploadDate == null || EF.Functions.DateDiffDay(f.FileUploadedOn, uploadDate.Value) == 0)
+                                           && (string.IsNullOrEmpty(normalizedProjectName) || f.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName))
+                                           && (string.IsNullOrEmpty(normalizedPatientType) || f.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType))
+                                     from p in f.Projects
+                                     join fr in _context.FileRows on f.FileId equals fr.FileId
+                                     select new { ProjectName = p.ProjectName, Count = 1 };
+
+            var totalExpiredQuery = from f in _context.Files
+                                    where (uploadDate == null || EF.Functions.DateDiffDay(f.FileUploadedOn, uploadDate.Value) == 0)
+                                          && (string.IsNullOrEmpty(normalizedProjectName) || f.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName))
+                                          && (string.IsNullOrEmpty(normalizedPatientType) || f.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType))
+                                    from p in f.Projects
+                                    join es in _context.ExpiredSsnIds on f.FileId equals es.FileId
+                                    select new { ProjectName = p.ProjectName, Count = 1 };
+
+            var totalPatientsPerProjectOverview = await totalFileRowsQuery
+                .Concat(totalExpiredQuery)
+                .GroupBy(x => x.ProjectName)
+                .Select(g => new { ProjectName = g.Key, TotalPatients = g.Sum(x => x.Count) })
+                .ToDictionaryAsync(x => x.ProjectName, x => x.TotalPatients);
+
+            var overviewDto = overviewCounts ?? new OverviewDto();
+            overviewDto.TotalPatientsPerProjectOverview = totalPatientsPerProjectOverview;
+            return overviewDto;
+        }
+
     }
 }

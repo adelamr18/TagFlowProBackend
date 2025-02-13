@@ -150,8 +150,7 @@ namespace TagFlowApi.Controllers
                 return BadRequest("File name is required.");
             }
 
-            var mergedFilesPath = Path.Combine(Directory.GetCurrentDirectory(), "MergedFiles");
-            var filePath = Path.Combine(mergedFilesPath, fileName);
+            var filePath = Path.Combine(_mergedFilesPath, fileName);
 
             if (!System.IO.File.Exists(filePath))
             {
@@ -165,7 +164,6 @@ namespace TagFlowApi.Controllers
 
             return File(fileBytes, contentType, fileName);
         }
-
 
         [HttpGet("get-all-files")]
         public async Task<IActionResult> GetAllFiles()
@@ -196,6 +194,24 @@ namespace TagFlowApi.Controllers
                 await _fileRepository.DeleteFileAsync(fileId);
 
                 return Ok(new { success = true, message = "File deleted successfully." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("overview")]
+        public async Task<IActionResult> GetOverview(
+        [FromQuery] DateTime? uploadDate,
+        [FromQuery] string? projectName,
+        [FromQuery] string? patientType)
+        {
+            try
+            {
+                var overview = await _fileRepository.GetOverviewAsync(uploadDate, projectName, patientType);
+
+                return Ok(new { success = true, overview });
             }
             catch (Exception ex)
             {
