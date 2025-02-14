@@ -97,17 +97,32 @@ namespace TagFlowApi.Repositories
                 .GroupBy(d => d.SsnId)
                 .ToDictionary(g => g.Key, g => g.Any(d => d.Status == PROCESSED_STATUS) ? PROCESSED_STATUS : g.First().Status);
             var fileRows = ssnIds.Select(ssn =>
-            {
-                var status = existingSsnMap.TryGetValue(ssn, out var existingStatus) && existingStatus == PROCESSED_STATUS
-                    ? PROCESSED_STATUS
-                    : UNPROCESSED_STATUS;
-                return new FileRow
-                {
-                    FileId = newFile.FileId,
-                    SsnId = ssn,
-                    Status = status
-                };
-            }).ToList();
+      {
+          bool isDuplicateProcessed = existingSsnMap.TryGetValue(ssn, out var existingStatus) && existingStatus == PROCESSED_STATUS;
+          var status = isDuplicateProcessed ? PROCESSED_STATUS : UNPROCESSED_STATUS;
+          var fileRow = new FileRow
+          {
+              FileId = newFile.FileId,
+              SsnId = ssn,
+              Status = status,
+          };
+          if (isDuplicateProcessed)
+          {
+              var duplicate = existingDuplicates.FirstOrDefault(d => d.SsnId == ssn);
+              if (duplicate != null)
+              {
+                  fileRow.InsuranceCompany = duplicate.InsuranceCompany;
+                  fileRow.MedicalNetwork = duplicate.MedicalNetwork;
+                  fileRow.IdentityNumber = duplicate.IdentityNumber;
+                  fileRow.PolicyNumber = duplicate.PolicyNumber;
+                  fileRow.Class = duplicate.Class;
+                  fileRow.DeductIblerate = duplicate.DeductIblerate;
+                  fileRow.MaxLimit = duplicate.MaxLimit;
+              }
+          }
+          return fileRow;
+      }).ToList();
+
             _context.FileRows.AddRange(fileRows);
 
             if (fileDto.SelectedProjectId.HasValue)
@@ -640,7 +655,7 @@ namespace TagFlowApi.Repositories
 
         public async Task<OverviewDto> GetOverviewAsync(DateTime? fromDate, DateTime? toDate, string? projectName, string? patientType)
         {
-            // Normalize filters
+            // Normalize filters.
             var normalizedProjectName = string.IsNullOrWhiteSpace(projectName) ? "" : projectName.ToLower().Replace(" ", "");
             var normalizedPatientType = string.IsNullOrWhiteSpace(patientType) ? "" : patientType.ToLower().Replace(" ", "");
 
@@ -649,71 +664,119 @@ namespace TagFlowApi.Repositories
             DateTime? endDate = null;
             if (fromDate.HasValue)
             {
-                // Use the date part only and mark as UTC.
                 startDate = DateTime.SpecifyKind(fromDate.Value.Date, DateTimeKind.Utc);
             }
             if (toDate.HasValue)
             {
-                // Add one day to include the entire day.
+                // Add one day so that the entire 'to' date is included.
                 endDate = DateTime.SpecifyKind(toDate.Value.Date, DateTimeKind.Utc).AddDays(1);
             }
 
-            // Compute overview counts.
+            // --------------------
+            // 1. Overall KPI Counts
+            // --------------------
             var overviewCounts = await (
                 from f in _context.Files
                 where ((startDate == null || f.FileUploadedOn >= startDate)
                        && (endDate == null || f.FileUploadedOn < endDate))
-                      && (string.IsNullOrEmpty(normalizedProjectName) || f.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName))
-                      && (string.IsNullOrEmpty(normalizedPatientType) || f.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType))
+                      && (string.IsNullOrEmpty(normalizedProjectName)
+                          || f.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName))
+                      && (string.IsNullOrEmpty(normalizedPatientType)
+                          || f.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType))
                 join fr in _context.FileRows on f.FileId equals fr.FileId
                 orderby fr.FileRowId
                 group fr by 1 into g
                 select new OverviewDto
                 {
-                    // Only count insured/uninsured for processed rows.
                     InsuredPatients = g.Sum(fr => (fr.Status == PROCESSED_STATUS || fr.Status == PROCESSED_WITH_ERROR)
                                                     ? (!string.IsNullOrEmpty(fr.InsuranceCompany) ? 1 : 0)
                                                     : 0),
                     NonInsuredPatients = g.Sum(fr => (fr.Status == PROCESSED_STATUS || fr.Status == PROCESSED_WITH_ERROR)
                                                        ? (string.IsNullOrEmpty(fr.InsuranceCompany) ? 1 : 0)
                                                        : 0),
-                    // Count all rows for Saudi/non‑Saudi.
                     SaudiPatients = g.Sum(fr => !string.IsNullOrEmpty(fr.SsnId) && fr.SsnId.StartsWith("1") ? 1 : 0),
                     NonSaudiPatients = g.Sum(fr => string.IsNullOrEmpty(fr.SsnId) || !fr.SsnId.StartsWith("1") ? 1 : 0)
                 }
             ).OrderBy(x => x.InsuredPatients).FirstOrDefaultAsync();
 
-            // Compute total patients per project (combining file rows and expired records).
-            var totalFileRowsQuery = from f in _context.Files
-                                     where ((startDate == null || f.FileUploadedOn >= startDate)
-                                            && (endDate == null || f.FileUploadedOn < endDate))
-                                           && (string.IsNullOrEmpty(normalizedProjectName) || f.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName))
-                                           && (string.IsNullOrEmpty(normalizedPatientType) || f.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType))
-                                     from p in f.Projects
-                                     join fr in _context.FileRows on f.FileId equals fr.FileId
-                                     select new { ProjectName = p.ProjectName, Count = 1 };
-
-            var totalExpiredQuery = from f in _context.Files
-                                    where ((startDate == null || f.FileUploadedOn >= startDate)
-                                           && (endDate == null || f.FileUploadedOn < endDate))
-                                          && (string.IsNullOrEmpty(normalizedProjectName) || f.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName))
-                                          && (string.IsNullOrEmpty(normalizedPatientType) || f.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType))
-                                    from p in f.Projects
-                                    join es in _context.ExpiredSsnIds on f.FileId equals es.FileId
-                                    select new { ProjectName = p.ProjectName, Count = 1 };
-
-            var totalPatientsPerProjectOverview = await totalFileRowsQuery
-                .Concat(totalExpiredQuery)
-                .GroupBy(x => x.ProjectName)
-                .Select(g => new { ProjectName = g.Key, TotalPatients = g.Sum(x => x.Count) })
-                .ToDictionaryAsync(x => x.ProjectName, x => x.TotalPatients);
-
+            // Initialize overview DTO.
             var overviewDto = overviewCounts ?? new OverviewDto();
-            overviewDto.TotalPatientsPerProjectOverview = totalPatientsPerProjectOverview;
+
+            // -------------------------
+            // 3. Projects Per Patient Analytics
+            // -------------------------
+            // Query FileRows with their associated File and Projects.
+            var fileRowsQuery = _context.FileRows
+                .Include(fr => fr.File)
+                    .ThenInclude(f => f.Projects)
+                .Where(fr =>
+                    (startDate == null || fr.File.FileUploadedOn >= startDate) &&
+                    (endDate == null || fr.File.FileUploadedOn < endDate) &&
+                    (string.IsNullOrEmpty(normalizedProjectName) || fr.File.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName)) &&
+                    (string.IsNullOrEmpty(normalizedPatientType) || fr.File.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType))
+                );
+
+            // Expand each file row into its project(s).
+            var projectFileRows = await fileRowsQuery
+                .SelectMany(fr => fr.File.Projects.Select(p => new { ProjectName = p.ProjectName, fr }))
+                .ToListAsync();
+
+            var projectAnalytics = projectFileRows
+                .GroupBy(x => x.ProjectName)
+                .Select(g => new
+                {
+                    ProjectName = g.Key,
+                    InsuredCount = g.Sum(x => (x.fr.Status == PROCESSED_STATUS || x.fr.Status == PROCESSED_WITH_ERROR) && !string.IsNullOrEmpty(x.fr.InsuranceCompany) ? 1 : 0),
+                    NonInsuredCount = g.Sum(x => (x.fr.Status == PROCESSED_STATUS || x.fr.Status == PROCESSED_WITH_ERROR) && string.IsNullOrEmpty(x.fr.InsuranceCompany) ? 1 : 0)
+                })
+                .ToList();
+
+            // Query expired records per project.
+            var expiredAnalytics = await _context.Files
+                .Include(f => f.Projects)
+                .Where(f =>
+                    (startDate == null || f.FileUploadedOn >= startDate) &&
+                    (endDate == null || f.FileUploadedOn < endDate) &&
+                    (string.IsNullOrEmpty(normalizedProjectName) || f.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName)) &&
+                    (string.IsNullOrEmpty(normalizedPatientType) || f.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType))
+                )
+                .Join(_context.ExpiredSsnIds, f => f.FileId, es => es.FileId, (f, es) => f)
+                .SelectMany(f => f.Projects.Select(p => new { p.ProjectName, Count = 1 }))
+                .GroupBy(x => x.ProjectName)
+                .Select(g => new { ProjectName = g.Key, ExpiredCount = g.Sum(x => x.Count) })
+                .ToListAsync();
+
+            // Merge analytics.
+            var projectsAnalyticsMerged = projectAnalytics.GroupJoin(
+                expiredAnalytics,
+                fa => fa.ProjectName,
+                ex => ex.ProjectName,
+                (fa, ex) => new
+                {
+                    fa.ProjectName,
+                    InsuredCount = fa.InsuredCount,
+                    NonInsuredCount = fa.NonInsuredCount,
+                    ExpiredCount = ex.Select(x => x.ExpiredCount).FirstOrDefault()
+                }
+            ).ToList();
+
+            // Build final analytics list.
+            var overallTotal = projectsAnalyticsMerged.Sum(p => p.InsuredCount + p.NonInsuredCount + p.ExpiredCount);
+            var projectsPerPatientAnalytics = projectsAnalyticsMerged.Select(p => new ProjectPatientAnalyticsDto
+            {
+                ProjectName = p.ProjectName,
+                InsuredPatients = p.InsuredCount,
+                NonInsuredPatients = p.NonInsuredCount,
+                TotalPatients = p.InsuredCount + p.NonInsuredCount + p.ExpiredCount,
+                PercentageOfPatientsPerProject = overallTotal > 0
+                    ? Math.Round((double)(p.InsuredCount + p.NonInsuredCount + p.ExpiredCount) / overallTotal * 100, 2)
+                    : 0
+            }).ToList();
+
+            overviewDto.ProjectsPerPatientAnalytics = projectsPerPatientAnalytics;
+
             return overviewDto;
         }
-
-
 
 
     }
