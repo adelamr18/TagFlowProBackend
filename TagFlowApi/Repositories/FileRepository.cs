@@ -18,7 +18,7 @@ namespace TagFlowApi.Repositories
         private static readonly string PROCESSED_WITH_ERROR = "Processed_with_error";
         private static readonly string PROCESSING_STATUS = "Processing";
         private static readonly string UNPROCESSED_STATUS = "Unprocessed";
-        private static readonly string BASE_URL = "https://tagflowprobackend-production.up.railway.app";
+        private static readonly string BASE_URL = "http://localhost:5500";
         public FileRepository(DataContext context)
         {
             _context = context;
@@ -652,7 +652,6 @@ namespace TagFlowApi.Repositories
                 await _context.SaveChangesAsync();
             }
         }
-
         public async Task<OverviewDto> GetOverviewAsync(DateTime? fromDate, DateTime? toDate, string? projectName, string? patientType)
         {
             // Normalize filters.
@@ -705,7 +704,6 @@ namespace TagFlowApi.Repositories
             // -------------------------
             // 3. Projects Per Patient Analytics
             // -------------------------
-            // Query FileRows with their associated File and Projects.
             var fileRowsQuery = _context.FileRows
                 .Include(fr => fr.File)
                     .ThenInclude(f => f.Projects)
@@ -716,7 +714,6 @@ namespace TagFlowApi.Repositories
                     (string.IsNullOrEmpty(normalizedPatientType) || fr.File.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType))
                 );
 
-            // Expand each file row into its project(s).
             var projectFileRows = await fileRowsQuery
                 .SelectMany(fr => fr.File.Projects.Select(p => new { ProjectName = p.ProjectName, fr }))
                 .ToListAsync();
@@ -731,7 +728,6 @@ namespace TagFlowApi.Repositories
                 })
                 .ToList();
 
-            // Query expired records per project.
             var expiredAnalytics = await _context.Files
                 .Include(f => f.Projects)
                 .Where(f =>
@@ -746,7 +742,6 @@ namespace TagFlowApi.Repositories
                 .Select(g => new { ProjectName = g.Key, ExpiredCount = g.Sum(x => x.Count) })
                 .ToListAsync();
 
-            // Merge analytics.
             var projectsAnalyticsMerged = projectAnalytics.GroupJoin(
                 expiredAnalytics,
                 fa => fa.ProjectName,
@@ -760,7 +755,6 @@ namespace TagFlowApi.Repositories
                 }
             ).ToList();
 
-            // Build final analytics list.
             var overallTotal = projectsAnalyticsMerged.Sum(p => p.InsuredCount + p.NonInsuredCount + p.ExpiredCount);
             var projectsPerPatientAnalytics = projectsAnalyticsMerged.Select(p => new ProjectPatientAnalyticsDto
             {
@@ -775,9 +769,44 @@ namespace TagFlowApi.Repositories
 
             overviewDto.ProjectsPerPatientAnalytics = projectsPerPatientAnalytics;
 
+            // -------------------------
+            // 4. Insurance Companies Per Patient Analytics
+            // -------------------------
+            // Query for file rows that have an insurance company, are processed, and match the filters.
+            var insuranceQuery = _context.FileRows
+                .Include(fr => fr.File)
+                .Where(fr =>
+                    (startDate == null || fr.File.FileUploadedOn >= startDate) &&
+                    (endDate == null || fr.File.FileUploadedOn < endDate) &&
+                    (string.IsNullOrEmpty(normalizedProjectName) || fr.File.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName)) &&
+                    (string.IsNullOrEmpty(normalizedPatientType) || fr.File.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType)) &&
+                    (fr.Status == PROCESSED_STATUS || fr.Status == PROCESSED_WITH_ERROR) &&
+                    !string.IsNullOrEmpty(fr.InsuranceCompany)
+                );
+
+            var insuranceAnalytics = await insuranceQuery
+                .GroupBy(fr => fr.InsuranceCompany)
+                .Select(g => new
+                {
+                    InsuranceCompany = g.Key,
+                    InsuredCount = g.Count()
+                })
+                .ToListAsync();
+
+            var overallInsuranceTotal = insuranceAnalytics.Sum(x => x.InsuredCount);
+            var insuranceCompaniesPertPatientAnalytics = insuranceAnalytics.Select(x => new InsuranceCompanyPatientAnalyticsDto
+            {
+                InsuranceCompany = x.InsuranceCompany,
+                InsuredPatients = x.InsuredCount,
+                PercentageOfPatients = overallInsuranceTotal > 0
+                    ? Math.Round((double)x.InsuredCount / overallInsuranceTotal * 100, 2)
+                    : 0
+            }).ToList();
+
+            overviewDto.InsuranceCompaniesPertPatientAnalytics = insuranceCompaniesPertPatientAnalytics;
+
             return overviewDto;
         }
-
 
     }
 }
