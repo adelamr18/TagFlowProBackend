@@ -652,7 +652,7 @@ namespace TagFlowApi.Repositories
                 await _context.SaveChangesAsync();
             }
         }
-        public async Task<OverviewDto> GetOverviewAsync(DateTime? fromDate, DateTime? toDate, string? projectName, string? patientType)
+        public async Task<OverviewDto> GetOverviewAsync(DateTime? fromDate, DateTime? toDate, string? projectName, string? patientType, int? viewerId = null)
         {
             // Normalize filters.
             var normalizedProjectName = string.IsNullOrWhiteSpace(projectName) ? "" : projectName.ToLower().Replace(" ", "");
@@ -705,14 +705,19 @@ namespace TagFlowApi.Repositories
             // 3. Projects Per Patient Analytics
             // -------------------------
             var fileRowsQuery = _context.FileRows
-                .Include(fr => fr.File)
-                    .ThenInclude(f => f.Projects)
-                .Where(fr =>
-                    (startDate == null || fr.File.FileUploadedOn >= startDate) &&
-                    (endDate == null || fr.File.FileUploadedOn < endDate) &&
-                    (string.IsNullOrEmpty(normalizedProjectName) || fr.File.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName)) &&
-                    (string.IsNullOrEmpty(normalizedPatientType) || fr.File.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType))
-                );
+      .Include(fr => fr.File)
+          .ThenInclude(f => f.Projects)
+      .Where(fr =>
+          (startDate == null || fr.File.FileUploadedOn >= startDate) &&
+          (endDate == null || fr.File.FileUploadedOn < endDate) &&
+          (string.IsNullOrEmpty(normalizedProjectName) ||
+              fr.File.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName)) &&
+          (string.IsNullOrEmpty(normalizedPatientType) ||
+              fr.File.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType)) &&
+          (viewerId == null ||
+              fr.File.UserId == viewerId)
+
+      );
 
             var projectFileRows = await fileRowsQuery
                 .SelectMany(fr => fr.File.Projects.Select(p => new { ProjectName = p.ProjectName, fr }))
@@ -733,8 +738,13 @@ namespace TagFlowApi.Repositories
                 .Where(f =>
                     (startDate == null || f.FileUploadedOn >= startDate) &&
                     (endDate == null || f.FileUploadedOn < endDate) &&
-                    (string.IsNullOrEmpty(normalizedProjectName) || f.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName)) &&
-                    (string.IsNullOrEmpty(normalizedPatientType) || f.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType))
+                    (string.IsNullOrEmpty(normalizedProjectName) ||
+                        f.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName)) &&
+                    (string.IsNullOrEmpty(normalizedPatientType) ||
+                        f.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType)) &&
+                    (viewerId == null ||
+                        f.UserId == viewerId)
+
                 )
                 .Join(_context.ExpiredSsnIds, f => f.FileId, es => es.FileId, (f, es) => f)
                 .SelectMany(f => f.Projects.Select(p => new { p.ProjectName, Count = 1 }))
@@ -774,15 +784,16 @@ namespace TagFlowApi.Repositories
             // -------------------------
             // Query for file rows that have an insurance company, are processed, and match the filters.
             var insuranceQuery = _context.FileRows
-                .Include(fr => fr.File)
-                .Where(fr =>
-                    (startDate == null || fr.File.FileUploadedOn >= startDate) &&
-                    (endDate == null || fr.File.FileUploadedOn < endDate) &&
-                    (string.IsNullOrEmpty(normalizedProjectName) || fr.File.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName)) &&
-                    (string.IsNullOrEmpty(normalizedPatientType) || fr.File.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType)) &&
-                    (fr.Status == PROCESSED_STATUS || fr.Status == PROCESSED_WITH_ERROR) &&
-                    !string.IsNullOrEmpty(fr.InsuranceCompany)
-                );
+            .Include(fr => fr.File)
+            .Where(fr =>
+                (startDate == null || fr.File.FileUploadedOn >= startDate) &&
+                (endDate == null || fr.File.FileUploadedOn < endDate) &&
+                (string.IsNullOrEmpty(normalizedProjectName) || fr.File.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName)) &&
+                (string.IsNullOrEmpty(normalizedPatientType) || fr.File.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType)) &&
+                (fr.Status == PROCESSED_STATUS || fr.Status == PROCESSED_WITH_ERROR) &&
+                !string.IsNullOrEmpty(fr.InsuranceCompany) &&
+                (viewerId == null || fr.File.UserId == viewerId)
+            );
 
             var insuranceAnalytics = await insuranceQuery
                 .GroupBy(fr => fr.InsuranceCompany)

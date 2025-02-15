@@ -205,11 +205,12 @@ namespace TagFlowApi.Controllers
                   [FromQuery] DateTime? fromDate,
                   [FromQuery] DateTime? toDate,
                   [FromQuery] string? projectName,
-                  [FromQuery] string? patientType)
+                  [FromQuery] string? patientType,
+                  [FromQuery] int? viewerId = null)
         {
             try
             {
-                var overview = await _fileRepository.GetOverviewAsync(fromDate, toDate, projectName, patientType);
+                var overview = await _fileRepository.GetOverviewAsync(fromDate, toDate, projectName, patientType, viewerId);
                 return Ok(new { success = true, overview });
             }
             catch (Exception ex)
