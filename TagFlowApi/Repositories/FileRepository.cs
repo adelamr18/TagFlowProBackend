@@ -151,6 +151,8 @@ namespace TagFlowApi.Repositories
 
             await _context.SaveChangesAsync();
 
+            await ProcessExpiredSsnIdsAsync(newFile.FileId);
+
             string? mergedFileName = existingDuplicates.Count > 0
                 ? await GenerateMergedExcelFileAsync(newFile.FileId, fileDto.File)
                 : null;
@@ -285,7 +287,8 @@ namespace TagFlowApi.Repositories
                 throw;
             }
         }
-        public async Task ProcessExpiredSsnIdsAsync(int fileId, IHubContext<FileStatusHub> hubContext)
+
+        public async Task ProcessExpiredSsnIdsAsync(int fileId)
         {
             var todayString = DateTime.UtcNow.ToString("yyyy-MM-dd");
             var expiredRows = await _context.FileRows
