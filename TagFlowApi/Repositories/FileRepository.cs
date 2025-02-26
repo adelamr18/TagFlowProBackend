@@ -18,7 +18,7 @@ namespace TagFlowApi.Repositories
         private static readonly string PROCESSED_WITH_ERROR = "Processed_with_error";
         private static readonly string PROCESSING_STATUS = "Processing";
         private static readonly string UNPROCESSED_STATUS = "Unprocessed";
-        private static readonly string BASE_URL = "https://tagflowprobackend-production.up.railway.app";
+        private static readonly string BASE_URL = "http://localhost:5500";
         public FileRepository(DataContext context)
         {
             _context = context;
@@ -150,8 +150,6 @@ namespace TagFlowApi.Repositories
                 newFile.FileStatus = PROCESSED_STATUS;
 
             await _context.SaveChangesAsync();
-
-            await ProcessExpiredSsnIdsAsync(newFile.FileId);
 
             string? mergedFileName = existingDuplicates.Count > 0
                 ? await GenerateMergedExcelFileAsync(newFile.FileId, fileDto.File)
@@ -287,8 +285,7 @@ namespace TagFlowApi.Repositories
                 throw;
             }
         }
-
-        public async Task ProcessExpiredSsnIdsAsync(int fileId)
+        public async Task ProcessExpiredSsnIdsAsync(int fileId, IHubContext<FileStatusHub> hubContext)
         {
             var todayString = DateTime.UtcNow.ToString("yyyy-MM-dd");
             var expiredRows = await _context.FileRows
@@ -820,6 +817,155 @@ namespace TagFlowApi.Repositories
             overviewDto.InsuranceCompaniesPertPatientAnalytics = insuranceCompaniesPertPatientAnalytics;
 
             return overviewDto;
+        }
+
+        public async Task<List<ProjectAnalyticsDto>> GetProjectAnalyticsAsync(
+        DateTime? fromDate,
+        DateTime? toDate,
+        string? projectName,
+        string? patientType,
+        string? timeGranularity)
+        {
+            var normalizedProjectName = string.IsNullOrWhiteSpace(projectName)
+                ? ""
+                : projectName.ToLower().Replace(" ", "");
+
+            var normalizedPatientType = string.IsNullOrWhiteSpace(patientType)
+                ? ""
+                : patientType.ToLower().Replace(" ", "");
+
+            DateTime? startDateBoundary = fromDate.HasValue
+                ? DateTime.SpecifyKind(fromDate.Value.Date, DateTimeKind.Utc)
+                : null;
+            DateTime? endDateBoundary = toDate.HasValue
+                ? DateTime.SpecifyKind(toDate.Value.Date, DateTimeKind.Utc).AddDays(1)
+                : null;
+
+            var query = _context.FileRows
+                .AsSplitQuery()
+                .Include(fr => fr.File)
+                    .ThenInclude(f => f.Projects)
+                .Include(fr => fr.File.PatientTypes)
+                .Where(fr =>
+                    (startDateBoundary == null || fr.File!.FileUploadedOn >= startDateBoundary) &&
+                    (endDateBoundary == null || fr.File!.FileUploadedOn < endDateBoundary) &&
+                    (string.IsNullOrEmpty(normalizedProjectName) ||
+                     fr.File!.Projects.Any(p => p.ProjectName.ToLower().Replace(" ", "") == normalizedProjectName)) &&
+                    (string.IsNullOrEmpty(normalizedPatientType) ||
+                     fr.File!.PatientTypes.Any(pt => pt.Name.ToLower().Replace(" ", "") == normalizedPatientType))
+                );
+
+            timeGranularity = string.IsNullOrEmpty(timeGranularity) ? "daily" : timeGranularity.ToLower();
+
+            List<(ProjectTimeKey Key, List<FileRow> Rows)> groupTuples;
+
+            if (timeGranularity == "weekly")
+            {
+                var fileRows = await query.ToListAsync();
+
+                var weeklyGroups = fileRows.GroupBy(fr =>
+                {
+                    var date = fr.File!.FileUploadedOn;
+                    int simpleWeek = ((date.DayOfYear - 1) / 7) + 1;
+
+                    return new
+                    {
+                        ProjectName = fr.File.Projects.Select(p => p.ProjectName).FirstOrDefault() ?? "",
+                        Year = date.Year,
+                        ComputedWeek = simpleWeek
+                    };
+                });
+
+                groupTuples = weeklyGroups
+                    .Select(g =>
+                    {
+                        var earliestDate = g.Min(r => r.File!.FileUploadedOn);
+                        var key = new ProjectTimeKey
+                        {
+                            ProjectName = g.Key.ProjectName,
+                            Year = g.Key.Year,
+                            Week = g.Key.ComputedWeek,
+                            Date = earliestDate // store the earliest date for final label
+                        };
+                        return (Key: key, Rows: g.ToList());
+                    })
+                    .ToList();
+            }
+            else
+            {
+                IQueryable<IGrouping<ProjectTimeKey, FileRow>> groupedQuery = timeGranularity switch
+                {
+                    "daily" => query.GroupBy(fr => new ProjectTimeKey
+                    {
+                        ProjectName = fr.File!.Projects.Select(p => p.ProjectName).FirstOrDefault() ?? "",
+                        Date = fr.File!.FileUploadedOn.Date
+                    }),
+                    "monthly" => query.GroupBy(fr => new ProjectTimeKey
+                    {
+                        ProjectName = fr.File!.Projects.Select(p => p.ProjectName).FirstOrDefault() ?? "",
+                        Year = fr.File!.FileUploadedOn.Year,
+                        Month = fr.File!.FileUploadedOn.Month
+                    }),
+                    "yearly" => query.GroupBy(fr => new ProjectTimeKey
+                    {
+                        ProjectName = fr.File!.Projects.Select(p => p.ProjectName).FirstOrDefault() ?? "",
+                        Year = fr.File!.FileUploadedOn.Year
+                    }),
+                    _ => query.GroupBy(fr => new ProjectTimeKey
+                    {
+                        ProjectName = fr.File!.Projects.Select(p => p.ProjectName).FirstOrDefault() ?? "",
+                        Date = fr.File!.FileUploadedOn.Date
+                    })
+                };
+
+                var efGroups = await groupedQuery
+                    .Select(g => new
+                    {
+                        Key = g.Key,
+                        Rows = g.ToList()
+                    })
+                    .ToListAsync();
+
+                groupTuples = efGroups
+                    .Select(x => (Key: x.Key, Rows: x.Rows))
+                    .ToList();
+            }
+
+            var analytics = groupTuples.Select(pair =>
+            {
+                var key = pair.Key;
+                var rows = pair.Rows;
+
+                string timeLabel = timeGranularity switch
+                {
+                    "daily" => key.Date.HasValue
+                        ? key.Date.Value.ToString("yyyy-MM-dd")
+                        : "",
+                    "weekly" => key.Date.HasValue
+                        ? key.Date.Value.ToString("yyyy-MM-dd")
+                        : "",
+                    "monthly" => key.Year.HasValue
+                        ? $"{key.Year}-{(key.Month.HasValue ? key.Month.Value.ToString("D2") : "00")}"
+                        : "",
+                    "yearly" => key.Year?.ToString() ?? "",
+                    _ => key.Date.HasValue
+                        ? key.Date.Value.ToString("yyyy-MM-dd")
+                        : ""
+                };
+
+                return new ProjectAnalyticsDto
+                {
+                    ProjectName = key.ProjectName,
+                    TimeLabel = timeLabel,
+                    TotalPatients = rows.Count,
+                    InsuredPatients = rows.Count(fr => (fr.Status == PROCESSED_STATUS || fr.Status == PROCESSED_WITH_ERROR)
+                                                 && !string.IsNullOrEmpty(fr.InsuranceCompany)),
+                    NonInsuredPatients = rows.Count(fr => (fr.Status == PROCESSED_STATUS || fr.Status == PROCESSED_WITH_ERROR)
+                                                 && string.IsNullOrEmpty(fr.InsuranceCompany))
+                };
+            }).ToList();
+
+            return analytics;
         }
 
     }

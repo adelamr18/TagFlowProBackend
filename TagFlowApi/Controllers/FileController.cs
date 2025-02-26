@@ -200,6 +200,7 @@ namespace TagFlowApi.Controllers
                 return BadRequest(new { success = false, message = ex.Message });
             }
         }
+
         [HttpGet("overview")]
         public async Task<IActionResult> GetOverview(
                   [FromQuery] DateTime? fromDate,
@@ -219,6 +220,26 @@ namespace TagFlowApi.Controllers
             }
         }
 
+        [HttpGet("project-analytics")]
+        public async Task<IActionResult> GetProjectAnalytics(
+        [FromQuery] DateTime? fromDate,
+        [FromQuery] DateTime? toDate,
+        [FromQuery] string? projectName,
+        [FromQuery] string? patientType,
+        [FromQuery] string? timeGranularity)
+        {
+
+            try
+            {
+                var analytics = await _fileRepository.GetProjectAnalyticsAsync(fromDate, toDate, projectName, patientType, timeGranularity);
+                return Ok(new { success = true, analytics });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+
+        }
 
     }
 }
