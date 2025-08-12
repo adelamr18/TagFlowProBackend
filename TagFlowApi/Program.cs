@@ -63,6 +63,7 @@ app.UseSwaggerUI(c =>
 app.UseHttpsRedirection();
 
 app.UseCors("AllowFrontend");
+app.UseMiddleware<ApiKeyMiddleware>();
 
 app.MapHub<FileStatusHub>("/file-status-hub");
 app.MapGet("/", () => Results.Redirect("/swagger"));
