@@ -11,7 +11,7 @@ public class ApiKeyMiddleware
     public async Task InvokeAsync(HttpContext context, IConfiguration configuration)
     {
         var configuredApiKey = Environment.GetEnvironmentVariable("API_KEY")
-                                ?? configuration["ApiKey"];
+                                ?? "";
 
         if (!context.Request.Headers.TryGetValue(ApiKeyHeaderName, out var extractedApiKey))
         {
