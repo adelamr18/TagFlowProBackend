@@ -9,10 +9,13 @@ namespace TagFlowApi.Infrastructure
     {
         public DataContext CreateDbContext(string[] args)
         {
+            var env = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Prod";
             var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
             var configuration = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.json")
+                .AddJsonFile("appsettings.json", optional: false)
+                .AddJsonFile($"appsettings.{env}.json", optional: true)
+                .AddEnvironmentVariables()
                 .Build();
 
             //optionsBuilder.UseSqlServer(configuration.GetConnectionString("DefaultConnection"));
