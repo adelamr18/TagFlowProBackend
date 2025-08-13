@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.AspNetCore.Mvc;
 
 namespace TagFlowApi.Middlewares;
 
@@ -39,29 +40,21 @@ public class RequestLoggingAndErrorMiddleware
         catch (Exception ex)
         {
             sw.Stop();
-
-            var root = ex;
-            while (root.InnerException != null) root = root.InnerException;
-
-            var st = new StackTrace(root, true);
-            var frame = st.GetFrames()?.FirstOrDefault(f => f.GetFileLineNumber() > 0) ?? st.GetFrame(0);
-            var file = frame?.GetFileName() ?? "n/a";
-            var line = frame?.GetFileLineNumber() ?? 0;
-            var member = frame?.GetMethod()?.Name ?? "n/a";
-
-            _logger.LogError(ex,
-                "unhandled_exception {method} {path} {elapsed_ms} trace={traceId} file={file} line={line} member={member}",
-                context.Request.Method,
-                context.Request.Path.Value,
-                sw.ElapsedMilliseconds,
-                context.TraceIdentifier,
-                file,
-                line,
-                member);
+            _logger.LogError(ex, "unhandled_exception {method} {path} {elapsed_ms} trace={traceId}",
+                context.Request.Method, context.Request.Path.Value, sw.ElapsedMilliseconds, context.TraceIdentifier);
 
             if (!context.Response.HasStarted)
             {
                 context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                context.Response.ContentType = "application/json";
+                var problem = new ProblemDetails
+                {
+                    Title = "An unexpected error occurred.",
+                    Status = StatusCodes.Status500InternalServerError,
+                    Instance = context.Request.Path
+                };
+                problem.Extensions["traceId"] = context.TraceIdentifier;
+                await context.Response.WriteAsJsonAsync(problem);
             }
         }
     }

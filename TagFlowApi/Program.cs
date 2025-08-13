@@ -4,37 +4,21 @@ using TagFlowApi.Infrastructure;
 using TagFlowApi.Repositories;
 using TagFlowApi.Hubs;
 using TagFlowApi.Middlewares;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Console;
 
 var builder = WebApplication.CreateBuilder(args);
-
-builder.Logging.ClearProviders();
-builder.Logging.AddConsole(o =>
-{
-    o.FormatterName = ConsoleFormatterNames.Json;
-    o.LogToStandardErrorThreshold = LogLevel.Warning;
-});
-builder.Services.Configure<JsonConsoleFormatterOptions>(o =>
-{
-    o.UseUtcTimestamp = true;
-});
-builder.Logging.SetMinimumLevel(LogLevel.Warning);
-builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
-builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
-builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
-builder.Logging.AddFilter("TagFlowApi", LogLevel.Warning);
 
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
     .AddEnvironmentVariables();
 
+// Update to use PostgreSQL
 // builder.Services.AddDbContext<DataContext>(options =>
 //     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddDbContext<DataContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// Register repositories and services
 builder.Services.AddScoped<UserRepository>();
 builder.Services.AddScoped<FileRepository>();
 builder.Services.AddScoped<AdminRepository>();
@@ -70,7 +54,6 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
-
 app.UseMiddleware<RequestLoggingAndErrorMiddleware>();
 app.UseSwagger();
 app.UseSwaggerUI(c =>
