@@ -15,7 +15,7 @@ public class ApiKeyMiddleware
 
         var configuredApiKey =
             Environment.GetEnvironmentVariable("API_KEY") ??
-            "";
+            Environment.GetEnvironmentVariable("ApiKey");
 
         if (string.IsNullOrWhiteSpace(configuredApiKey))
         {
