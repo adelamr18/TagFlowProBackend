@@ -3,6 +3,7 @@ using Microsoft.OpenApi.Models;
 using TagFlowApi.Infrastructure;
 using TagFlowApi.Repositories;
 using TagFlowApi.Hubs;
+using TagFlowApi.Middlewares;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -54,6 +55,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+app.UseMiddleware<RequestLoggingAndErrorMiddleware>();
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
