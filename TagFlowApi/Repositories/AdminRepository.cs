@@ -677,7 +677,6 @@ namespace TagFlowApi.Repositories
             }
         }
 
-        // File: TagFlowApi/Repositories/AdminRepository.cs
         public async Task<bool> DeleteProjectAsync(int projectId)
         {
             var project = await _context.Projects
