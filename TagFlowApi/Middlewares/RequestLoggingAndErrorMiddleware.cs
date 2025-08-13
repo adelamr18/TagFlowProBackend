@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Primitives;
 
 namespace TagFlowApi.Middlewares;
 
@@ -17,6 +18,8 @@ public class RequestLoggingAndErrorMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         var sw = Stopwatch.StartNew();
+
+
         try
         {
             await _next(context);
@@ -26,34 +29,39 @@ public class RequestLoggingAndErrorMiddleware
 
             if (status >= 500)
             {
-                _logger.LogError("req_end {method} {path} {status} {elapsed_ms} trace={traceId}",
-                    context.Request.Method, context.Request.Path.Value, status, sw.ElapsedMilliseconds,
-                    context.TraceIdentifier);
+                _logger.LogError("req_end {method} {path} {status} {elapsed_ms}",
+                    context.Request.Method, context.Request.Path.Value, status, sw.ElapsedMilliseconds);
             }
             else if (status >= 400)
             {
-                _logger.LogWarning("req_end {method} {path} {status} {elapsed_ms} trace={traceId}",
-                    context.Request.Method, context.Request.Path.Value, status, sw.ElapsedMilliseconds,
-                    context.TraceIdentifier);
+                _logger.LogWarning("req_end {method} {path} {status} {elapsed_ms}",
+                    context.Request.Method, context.Request.Path.Value, status, sw.ElapsedMilliseconds);
+            }
+            else
+            {
+                _logger.LogInformation("req_end {method} {path} {status} {elapsed_ms} ",
+                    context.Request.Method, context.Request.Path.Value, status, sw.ElapsedMilliseconds);
             }
         }
         catch (Exception ex)
         {
             sw.Stop();
-            _logger.LogError(ex, "unhandled_exception {method} {path} {elapsed_ms} trace={traceId}",
-                context.Request.Method, context.Request.Path.Value, sw.ElapsedMilliseconds, context.TraceIdentifier);
+
+            _logger.LogError(ex, "unhandled_exception {method} {path} {elapsed_ms}",
+                context.Request.Method, context.Request.Path.Value, sw.ElapsedMilliseconds);
 
             if (!context.Response.HasStarted)
             {
                 context.Response.StatusCode = StatusCodes.Status500InternalServerError;
                 context.Response.ContentType = "application/json";
+
                 var problem = new ProblemDetails
                 {
                     Title = "An unexpected error occurred.",
                     Status = StatusCodes.Status500InternalServerError,
-                    Instance = context.Request.Path
+                    Instance = context.Request.Path,
                 };
-                problem.Extensions["traceId"] = context.TraceIdentifier;
+
                 await context.Response.WriteAsJsonAsync(problem);
             }
         }
