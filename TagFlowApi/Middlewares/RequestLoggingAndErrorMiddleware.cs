@@ -34,14 +34,10 @@ public class RequestLoggingAndErrorMiddleware
             }
             else if (status >= 400)
             {
-                _logger.LogWarning("req_end {method} {path} {status} {elapsed_ms}",
+                _logger.LogError("req_end {method} {path} {status} {elapsed_ms}",
                     context.Request.Method, context.Request.Path.Value, status, sw.ElapsedMilliseconds);
             }
-            else
-            {
-                _logger.LogInformation("req_end {method} {path} {status} {elapsed_ms} ",
-                    context.Request.Method, context.Request.Path.Value, status, sw.ElapsedMilliseconds);
-            }
+
         }
         catch (Exception ex)
         {
