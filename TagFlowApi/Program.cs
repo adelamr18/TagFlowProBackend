@@ -4,8 +4,19 @@ using TagFlowApi.Infrastructure;
 using TagFlowApi.Repositories;
 using TagFlowApi.Hubs;
 using TagFlowApi.Middlewares;
+using Microsoft.Extensions.Logging;            // logging
+using Microsoft.Extensions.Logging.Console;   // ConsoleLoggerOptions
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Logging: emit JSON, suppress Info, and send Warning+ to STDERR so Railway marks them correctly
+builder.Logging.ClearProviders();
+builder.Logging.AddJsonConsole(o => { o.UseUtcTimestamp = true; });
+builder.Logging.SetMinimumLevel(LogLevel.Warning);
+builder.Services.Configure<ConsoleLoggerOptions>(o =>
+{
+    o.LogToStandardErrorThreshold = LogLevel.Warning;
+});
 
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
