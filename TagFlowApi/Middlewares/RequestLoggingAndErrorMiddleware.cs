@@ -16,12 +16,6 @@ public class RequestLoggingAndErrorMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        var qsApiKey = context.Request.Query["apiKey"].ToString();
-        if (string.IsNullOrEmpty(qsApiKey))
-            qsApiKey = context.Request.Query["access_token"].ToString();
-        if (!string.IsNullOrEmpty(qsApiKey) && !context.Request.Headers.ContainsKey("X-Api-Key"))
-            context.Request.Headers["X-Api-Key"] = qsApiKey;
-
         var sw = Stopwatch.StartNew();
         try
         {

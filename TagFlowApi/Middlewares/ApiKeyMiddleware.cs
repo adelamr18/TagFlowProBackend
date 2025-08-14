@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Primitives;
+
 public class ApiKeyMiddleware
 {
     private readonly RequestDelegate _next;
@@ -24,8 +26,20 @@ public class ApiKeyMiddleware
             return;
         }
 
-        if (!context.Request.Headers.TryGetValue(ApiKeyHeaderName, out var extractedApiKey) ||
-            !string.Equals(extractedApiKey, configuredApiKey, StringComparison.Ordinal))
+        StringValues incoming = context.Request.Headers[ApiKeyHeaderName];
+        if (StringValues.IsNullOrEmpty(incoming))
+            incoming = context.Request.Query["apiKey"];
+        if (StringValues.IsNullOrEmpty(incoming))
+            incoming = context.Request.Query["access_token"];
+
+        if (StringValues.IsNullOrEmpty(incoming))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsync("API Key is missing.");
+            return;
+        }
+
+        if (!string.Equals(incoming.ToString(), configuredApiKey, StringComparison.Ordinal))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             await context.Response.WriteAsync("Invalid API Key.");
