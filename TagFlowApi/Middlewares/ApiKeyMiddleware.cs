@@ -26,20 +26,29 @@ public class ApiKeyMiddleware
             return;
         }
 
-        StringValues incoming = context.Request.Headers[ApiKeyHeaderName];
-        if (StringValues.IsNullOrEmpty(incoming))
-            incoming = context.Request.Query["apiKey"];
-        if (StringValues.IsNullOrEmpty(incoming))
-            incoming = context.Request.Query["access_token"];
+        string? incomingApiKey =
+            context.Request.Headers[ApiKeyHeaderName].FirstOrDefault() ??
+            context.Request.Query["apiKey"].FirstOrDefault() ??
+            context.Request.Query["access_token"].FirstOrDefault();
 
-        if (StringValues.IsNullOrEmpty(incoming))
+        if (string.IsNullOrEmpty(incomingApiKey))
+        {
+            var auth = context.Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(auth) &&
+                auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                incomingApiKey = auth.Substring("Bearer ".Length).Trim();
+            }
+        }
+
+        if (string.IsNullOrEmpty(incomingApiKey))
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             await context.Response.WriteAsync("API Key is missing.");
             return;
         }
 
-        if (!string.Equals(incoming.ToString(), configuredApiKey, StringComparison.Ordinal))
+        if (!string.Equals(incomingApiKey, configuredApiKey, StringComparison.Ordinal))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             await context.Response.WriteAsync("Invalid API Key.");
