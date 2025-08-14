@@ -189,9 +189,15 @@ namespace TagFlowApi.Repositories
                 throw new InvalidOperationException($"File with ID {fileId} not found.");
             }
 
-            string? downloadLink = fileName != null
-                ? $"{BASE_URL}/api/file/download?fileName={Uri.EscapeDataString(fileName)}&fileId={fileId}"
-                : null;
+            string? downloadLink = null;
+            if (fileName != null)
+            {
+                var apiKey = Environment.GetEnvironmentVariable("API_KEY") ?? Environment.GetEnvironmentVariable("ApiKey");
+                var qs = $"fileName={Uri.EscapeDataString(fileName)}&fileId={fileId}";
+                downloadLink = string.IsNullOrEmpty(apiKey)
+                    ? $"{BASE_URL}/api/file/download?{qs}"
+                    : $"{BASE_URL}/api/file/download?{qs}&apiKey={Uri.EscapeDataString(apiKey)}";
+            }
 
             fileRecord.DownloadLink = downloadLink ?? "";
             bool allRowsProcessed = await _context.FileRows
@@ -207,7 +213,6 @@ namespace TagFlowApi.Repositories
             {
                 fileRecord.FileStatus = UNPROCESSED_STATUS;
             }
-
 
             _context.Files.Update(fileRecord);
             await _context.SaveChangesAsync();
@@ -654,7 +659,6 @@ namespace TagFlowApi.Repositories
         }
         public async Task<OverviewDto> GetOverviewAsync(DateTime? fromDate, DateTime? toDate, string? projectName, string? patientType, int? viewerId = null)
         {
-            // Normalize filters.
             var normalizedProjectName = string.IsNullOrWhiteSpace(projectName) ? "" : projectName.ToLower().Replace(" ", "");
             var normalizedPatientType = string.IsNullOrWhiteSpace(patientType) ? "" : patientType.ToLower().Replace(" ", "");
 
@@ -673,7 +677,7 @@ namespace TagFlowApi.Repositories
 
             // --------------------
             // 1. Overall KPI Counts
-            // --------------------
+            // -
             var overviewCounts = await (
                 from f in _context.Files
                 where ((startDate == null || f.FileUploadedOn >= startDate)
@@ -778,7 +782,6 @@ namespace TagFlowApi.Repositories
             }).ToList();
 
             overviewDto.ProjectsPerPatientAnalytics = projectsPerPatientAnalytics;
-
             // -------------------------
             // 4. Insurance Companies Per Patient Analytics
             // -------------------------
@@ -885,7 +888,7 @@ namespace TagFlowApi.Repositories
                             ProjectName = g.Key.ProjectName,
                             Year = g.Key.Year,
                             Week = g.Key.ComputedWeek,
-                            Date = earliestDate // store the earliest date for final label
+                            Date = earliestDate
                         };
                         return (Key: key, Rows: g.ToList());
                     })
