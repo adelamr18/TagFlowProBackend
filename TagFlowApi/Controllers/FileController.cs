@@ -241,5 +241,29 @@ namespace TagFlowApi.Controllers
 
         }
 
+        [HttpPost("robot-errors")]
+        public async Task<IActionResult> AddRobotError([FromBody] RobotErrorCreateDto dto)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(dto.Module) || string.IsNullOrWhiteSpace(dto.ErrorMessage))
+                    return BadRequest(new { success = false, message = "Module and ErrorMessage are required." });
+
+                var newId = await _fileRepository.AddRobotErrorAsync(dto);
+
+                return Ok(new
+                {
+                    success = true,
+                    id = newId,
+                    message = "Robot error logged successfully."
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
+
+
     }
 }

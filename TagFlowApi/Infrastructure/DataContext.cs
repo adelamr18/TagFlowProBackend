@@ -22,6 +22,8 @@ namespace TagFlowApi.Infrastructure
 
         public DbSet<ExpiredSsnIds> ExpiredSsnIds { get; set; }
 
+        public DbSet<RobotErrors> RobotErrors { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);

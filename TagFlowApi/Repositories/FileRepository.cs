@@ -971,5 +971,35 @@ namespace TagFlowApi.Repositories
             return analytics;
         }
 
+        public async Task<int> AddRobotErrorAsync(RobotErrorCreateDto dto)
+        {
+            File? file = null;
+            if (dto.FileId.HasValue)
+            {
+                file = await _context.Files
+                                     .AsNoTracking()
+                                     .FirstOrDefaultAsync(f => f.FileId == dto.FileId.Value);
+
+                if (file == null)
+                    throw new ArgumentException($"File with id {dto.FileId.Value} was not found.");
+            }
+
+            var entity = new RobotErrors
+            {
+                Module = dto.Module.Trim(),
+                ErrorMessage = dto.ErrorMessage,                // keep raw text
+                Timestamp = (dto.Timestamp ?? DateTime.UtcNow), // default to now (UTC)
+                FileId = dto.FileId,
+                FileName = dto.FileName ?? "",
+                PatientId = dto.PatientId ?? "",
+            };
+
+            _context.RobotErrors.Add(entity);
+            await _context.SaveChangesAsync();
+
+            return entity.Id;
+        }
+
+
     }
 }
