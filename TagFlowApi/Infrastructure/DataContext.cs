@@ -200,6 +200,33 @@ namespace TagFlowApi.Infrastructure
           .HasForeignKey(f => f.AdminId)
           .OnDelete(DeleteBehavior.Restrict);
 
+            modelBuilder.Entity<RobotErrors>(entity =>
+          {
+              entity.HasKey(e => e.Id);
+
+              entity.Property(e => e.Module)
+                  .IsRequired()
+                  .HasMaxLength(255);
+
+              entity.Property(e => e.ErrorMessage)
+                  .IsRequired();
+
+              entity.Property(e => e.Timestamp)
+                  .HasColumnType("timestamptz");
+
+              entity.Property(e => e.FileName)
+                  .HasMaxLength(500);
+
+              entity.Property(e => e.PatientId)
+                  .HasMaxLength(255);
+
+              entity.HasOne(e => e.File)
+                  .WithMany(f => f.RobotErrors)
+                  .HasForeignKey(e => e.FileId)
+                  .OnDelete(DeleteBehavior.SetNull);
+          });
+
+
 
         }
     }

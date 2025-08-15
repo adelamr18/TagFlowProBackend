@@ -24,5 +24,7 @@ namespace TagFlowApi.Models
         public ICollection<FileRow> FileRows { get; set; } = new List<FileRow>();
         public ICollection<Project> Projects { get; set; } = new List<Project>();
         public ICollection<PatientType> PatientTypes { get; set; } = new List<PatientType>();
+
+        public ICollection<RobotErrors> RobotErrors { get; set; } = new List<RobotErrors>();
     }
 }
