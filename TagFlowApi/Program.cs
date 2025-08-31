@@ -33,9 +33,10 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "TagFlow API", Version = "v1" });
     c.AddServer(new OpenApiServer
     {
-        Url = "https://tagflowprobackend-production.up.railway.app",
-        Description = "Production server"
+        Url = "http://172.29.2.3:5000",
+        Description = "Backend VM"
     });
+
 
     c.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
     {
