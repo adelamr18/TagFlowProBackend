@@ -1,11 +1,16 @@
-using Microsoft.Extensions.Primitives;
-
 public class ApiKeyMiddleware
 {
     private readonly RequestDelegate _next;
     private const string ApiKeyHeaderName = "X-Api-Key";
+    private readonly string? _configuredApiKey;
 
-    public ApiKeyMiddleware(RequestDelegate next) => _next = next;
+    public ApiKeyMiddleware(RequestDelegate next, IConfiguration config)
+    {
+        _next = next;
+        _configuredApiKey = config["ApiKey"] ??
+                            Environment.GetEnvironmentVariable("API_KEY") ??
+                            Environment.GetEnvironmentVariable("ApiKey");
+    }
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -15,11 +20,7 @@ public class ApiKeyMiddleware
             return;
         }
 
-        var configuredApiKey =
-            Environment.GetEnvironmentVariable("API_KEY") ??
-            Environment.GetEnvironmentVariable("ApiKey");
-
-        if (string.IsNullOrWhiteSpace(configuredApiKey))
+        if (string.IsNullOrWhiteSpace(_configuredApiKey))
         {
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
             await context.Response.WriteAsync("Server API key not configured.");
@@ -48,7 +49,7 @@ public class ApiKeyMiddleware
             return;
         }
 
-        if (!string.Equals(incomingApiKey, configuredApiKey, StringComparison.Ordinal))
+        if (!string.Equals(incomingApiKey, _configuredApiKey, StringComparison.Ordinal))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             await context.Response.WriteAsync("Invalid API Key.");
