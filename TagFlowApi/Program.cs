@@ -17,6 +17,7 @@ builder.Configuration
 //     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddDbContext<DataContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 builder.Services.AddScoped<UserRepository>();
 builder.Services.AddScoped<FileRepository>();
@@ -64,6 +65,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend", policy =>
     {
         policy.WithOrigins(
+                "http://172.29.2.2:8080",
                 "http://localhost:3000",
                 "https://tagflowprobackend-production.up.railway.app",
                 "https://fluffy-chimera-603c00.netlify.app",
