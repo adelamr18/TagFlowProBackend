@@ -18,7 +18,7 @@ namespace TagFlowApi.Repositories
         private static readonly string PROCESSED_WITH_ERROR = "Processed_with_error";
         private static readonly string PROCESSING_STATUS = "Processing";
         private static readonly string UNPROCESSED_STATUS = "Unprocessed";
-        private static readonly string BASE_URL = "https://tagflowprobackend-production.up.railway.app";
+        private static readonly string BASE_URL = "http://172.29.2.2:8080";
         public FileRepository(DataContext context)
         {
             _context = context;
