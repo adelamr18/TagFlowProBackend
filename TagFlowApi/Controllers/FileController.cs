@@ -143,26 +143,27 @@ namespace TagFlowApi.Controllers
         }
 
         [HttpGet("download")]
-        public async Task<IActionResult> DownloadMergedFile([FromQuery] string fileName, [FromQuery] int fileId)
+        public async Task<IActionResult> Download([FromQuery] int fileId, [FromQuery] string? fileName = null)
         {
-            if (string.IsNullOrEmpty(fileName))
-            {
-                return BadRequest("File name is required.");
-            }
+            var fileRec = await _fileRepository.GetFileByIdAsync(fileId);
+            if (fileRec is null)
+                return NotFound("Record not found.");
 
-            var filePath = Path.Combine(_mergedFilesPath, fileName);
+            var safeName = string.IsNullOrWhiteSpace(fileRec.FileName)
+                ? (fileName ?? $"file_{fileId}.xlsx")
+                : fileRec.FileName;
+
+            safeName = Path.GetFileName(safeName); // avoid path traversal
+            var filePath = Path.Combine(_mergedFilesPath, safeName);
 
             if (!System.IO.File.Exists(filePath))
-            {
-                return NotFound("File not found.");
-            }
+                return NotFound("File not found on disk.");
 
-            await _fileRepository.UpdateFileDownloadLinkAsync(fileId, fileName);
+            await _fileRepository.UpdateFileDownloadLinkAsync(fileId, safeName);
 
-            var fileBytes = System.IO.File.ReadAllBytes(filePath);
-            var contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-
-            return File(fileBytes, contentType, fileName);
+            var fileBytes = await System.IO.File.ReadAllBytesAsync(filePath);
+            const string xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            return File(fileBytes, xlsx, safeName);
         }
 
         [HttpGet("get-all-files")]

@@ -68,6 +68,7 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(
                 "http://172.29.2.2:8080",
+                "https://172.29.2.2:8080",
                 "http://localhost:3000",
                 "https://tagflowprobackend-production.up.railway.app",
                 "https://fluffy-chimera-603c00.netlify.app",
