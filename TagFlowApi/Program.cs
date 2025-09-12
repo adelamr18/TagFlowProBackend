@@ -4,6 +4,7 @@ using TagFlowApi.Infrastructure;
 using TagFlowApi.Repositories;
 using TagFlowApi.Hubs;
 using TagFlowApi.Middlewares;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -83,6 +84,12 @@ app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "TagFlow API V1");
+});
+
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+    KnownProxies = { System.Net.IPAddress.Parse("172.29.2.2") }
 });
 
 app.UseHttpsRedirection();
