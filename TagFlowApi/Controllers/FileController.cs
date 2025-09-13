@@ -348,6 +348,12 @@ namespace TagFlowApi.Controllers
         }
 
 
+        [HttpGet("where-are-files")]
+        public IActionResult WhereAreFiles([FromServices] IConfiguration cfg)
+        {
+            var configured = cfg["MergedDir"] ?? Environment.GetEnvironmentVariable("MERGED_DIR") ?? "/var/lib/tagflow/merged";
+            return Ok(new { configured });
+        }
 
 
 
