@@ -65,7 +65,7 @@ namespace TagFlowApi.Controllers
 
                 var patientTypeIds = string.IsNullOrEmpty(selectedPatientTypeIds)
                     ? new List<int>()
-                    : Newtonsoft.Json.JsonConvert.DeserializeObject<List<int>>(selectedPatientTypeIds);
+                    : JsonConvert.DeserializeObject<List<int>>(selectedPatientTypeIds);
 
                 var addFileDto = new AddFileDto
                 {
@@ -85,7 +85,7 @@ namespace TagFlowApi.Controllers
 
                 using (var fileStream = new MemoryStream(memory.ToArray()))
                 {
-                    var (fileName, fileId) = await _fileRepository.UploadFileAsyncTwo(addFileDto, fileStream);
+                    var (fileName, fileId) = await _fileRepository.UploadFileAsyncModifiedWithLogs(addFileDto, fileStream);
                     if (!string.IsNullOrEmpty(fileName))
                     {
                         return Ok(new
@@ -292,71 +292,6 @@ namespace TagFlowApi.Controllers
                 return BadRequest(new { success = false, message = ex.Message });
             }
         }
-
-        [HttpPost("debug-write")]
-        public IActionResult DebugWrite([FromQuery] int fileId = 999)
-        {
-            try
-            {
-                var fn = $"debug_{fileId}.txt";
-                var path = Path.Combine("/var/lib/tagflow/merged", fn);
-                System.IO.File.WriteAllText(path, DateTime.UtcNow.ToString("O"));
-                var exists = System.IO.File.Exists(path);
-                return Ok(new { success = exists, path });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, error = ex.Message });
-            }
-        }
-
-        // Add inside the FileController class
-
-        // FileController.cs (inside the FileController class)
-
-        [HttpGet("diag-write")]
-        [AllowAnonymous]  // so only the header check applies
-        public IActionResult DiagWrite([FromServices] IConfiguration cfg, [FromServices] ILogger<FileController> logger)
-        {
-            var provided = Request.Headers["X-Api-Key"].FirstOrDefault();
-            var expected = cfg["ApiKey"]
-                           ?? Environment.GetEnvironmentVariable("API_KEY")
-                           ?? Environment.GetEnvironmentVariable("ApiKey");
-
-            if (string.IsNullOrWhiteSpace(expected) || !string.Equals(provided, expected))
-            {
-                logger.LogWarning("diag-write: API key missing/invalid.");
-                return Unauthorized("API Key is missing or invalid.");
-            }
-
-            var dir = "/var/lib/tagflow/merged";
-            var stamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
-            var path = System.IO.Path.Combine(dir, $"_diag_{stamp}.txt");
-
-            try
-            {
-                System.IO.Directory.CreateDirectory(dir);
-                System.IO.File.WriteAllText(path, $"ok {stamp}\n");
-                logger.LogInformation("diag-write wrote {Path}", path);
-                return Ok(new { ok = true, path });
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "diag-write failed writing {Path}", path);
-                return StatusCode(500, new { ok = false, error = ex.Message, path });
-            }
-        }
-
-
-        [HttpGet("where-are-files")]
-        public IActionResult WhereAreFiles([FromServices] IConfiguration cfg)
-        {
-            var configured = cfg["MergedDir"] ?? Environment.GetEnvironmentVariable("MERGED_DIR") ?? "/var/lib/tagflow/merged";
-            return Ok(new { configured });
-        }
-
-
-
 
     }
 }

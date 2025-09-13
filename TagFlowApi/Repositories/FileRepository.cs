@@ -185,25 +185,22 @@ namespace TagFlowApi.Repositories
             return (mergedFileName, newFile.FileId);
         }
 
-        public async Task<(string? filePath, int newFileId)> UploadFileAsyncTwo(AddFileDto fileDto, Stream fileStream)
+        public async Task<(string? filePath, int newFileId)> UploadFileAsyncModifiedWithLogs(AddFileDto fileDto, Stream fileStream)
         {
             if (fileStream is null || !fileStream.CanRead)
                 throw new Exception("Invalid file stream. The file cannot be read.");
 
-            // 1) Validate (consumes stream) ➜ rewind after
             var (isExcel, hasSsnColumn, _) = ValidateExcelFile(fileStream);
             if (!isExcel) throw new Exception("The uploaded file is not a valid Excel file.");
             if (!hasSsnColumn) throw new Exception("The uploaded Excel file does not contain a column named 'SSN'.");
             if (fileStream.CanSeek) fileStream.Position = 0;
 
-            // 2) Extract SSNs (consumes stream) ➜ rewind after
             var ssnIds = await ExtractSsnIdsFromExcel(fileStream);
             if (fileStream.CanSeek) fileStream.Position = 0;
 
             if (fileStream.Length == 0)
                 throw new Exception("The file stream is empty or null.");
 
-            // 3) Persist the original upload to bytes
             byte[] fileContent;
             using (var memoryStream = new MemoryStream())
             {
@@ -242,7 +239,6 @@ namespace TagFlowApi.Repositories
 
             Console.WriteLine($"[UPLOAD] start FileId={newFile.FileId}, name={newFile.FileName}, dir={_mergedDir}");
 
-            // (unchanged) Pre-populate FileRows so your downstream logic still works
             var existingDuplicates = await GetDuplicateSSNsAsync(ssnIds);
             var existingSsnMap = existingDuplicates
                 .GroupBy(d => d.SsnId)
@@ -299,7 +295,6 @@ namespace TagFlowApi.Repositories
 
             await _context.SaveChangesAsync();
 
-            // ===== SIMPLE, GUARANTEED WRITE TO DISK (no EPPlus merge) =====
             Directory.CreateDirectory(_mergedDir); // idempotent
             var mergedName = $"File_{newFile.FileId}_Merged.xlsx";
             var mergedPath = Path.Combine(_mergedDir, mergedName);
