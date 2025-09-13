@@ -5,8 +5,22 @@ using TagFlowApi.Repositories;
 using TagFlowApi.Hubs;
 using TagFlowApi.Middlewares;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Http.Features;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = null;
+});
+
+builder.Services.Configure<FormOptions>(opts =>
+{
+    opts.MultipartBodyLengthLimit = 500L * 1024 * 1024;
+    opts.ValueLengthLimit = int.MaxValue;
+    opts.MultipartHeadersLengthLimit = int.MaxValue;
+});
+
 
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
