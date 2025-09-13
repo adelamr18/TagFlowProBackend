@@ -161,9 +161,8 @@ namespace TagFlowApi.Repositories
 
             await _context.SaveChangesAsync();
 
-            string? mergedFileName = existingDuplicates.Count > 0
-                ? await GenerateMergedExcelFileAsync(newFile.FileId, fileDto.File)
-                : null;
+            string mergedFileName = await GenerateMergedExcelFileAsync(newFile.FileId, fileDto.File);
+
             await UpdateFileDownloadLinkAsync(newFile.FileId, mergedFileName);
 
             return (mergedFileName, newFile.FileId);
