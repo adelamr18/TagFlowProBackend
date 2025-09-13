@@ -12,8 +12,9 @@ namespace TagFlowApi.Controllers
     public class FileController : ControllerBase
     {
         private readonly FileRepository _fileRepository;
-        private readonly string _mergedFilesPath = Path.Combine(Path.GetTempPath(), "MergedFiles");
+        private readonly string _mergedFilesPath = "/var/lib/tagflow/merged";
         private readonly IHubContext<FileStatusHub> _hubContext;
+
         public FileController(FileRepository fileRepository, IHubContext<FileStatusHub> hubContext)
         {
             _fileRepository = fileRepository;
@@ -149,22 +150,48 @@ namespace TagFlowApi.Controllers
             if (fileRec is null)
                 return NotFound("Record not found.");
 
-            var safeName = string.IsNullOrWhiteSpace(fileRec.FileName)
-                ? (fileName ?? $"file_{fileId}.xlsx")
-                : fileRec.FileName;
+            string mergedDefault = $"File_{fileId}_Merged.xlsx";
 
-            safeName = Path.GetFileName(safeName); // avoid path traversal
-            var filePath = Path.Combine(_mergedFilesPath, safeName);
+            string resolvedName = !string.IsNullOrWhiteSpace(fileName)
+                ? Path.GetFileName(fileName)
+                : mergedDefault;
 
-            if (!System.IO.File.Exists(filePath))
-                return NotFound("File not found on disk.");
+            if (resolvedName == mergedDefault && !string.IsNullOrWhiteSpace(fileRec.DownloadLink))
+            {
+                try
+                {
+                    var uri = new Uri(fileRec.DownloadLink, UriKind.RelativeOrAbsolute);
+                    var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+                    var fromLink = query.Get("fileName");
+                    if (!string.IsNullOrWhiteSpace(fromLink))
+                        resolvedName = Path.GetFileName(fromLink);
+                }
+                catch { /* ignore parse issues */ }
+            }
 
-            await _fileRepository.UpdateFileDownloadLinkAsync(fileId, safeName);
+            var path = Path.Combine(_mergedFilesPath, resolvedName);
+            if (!System.IO.File.Exists(path))
+            {
 
-            var fileBytes = await System.IO.File.ReadAllBytesAsync(filePath);
+                var fallbackMerged = Path.Combine(_mergedFilesPath, mergedDefault);
+                if (System.IO.File.Exists(fallbackMerged))
+                    path = fallbackMerged;
+                else
+                {
+                    var orig = Path.Combine(_mergedFilesPath, Path.GetFileName(fileRec.FileName ?? string.Empty));
+                    if (!string.IsNullOrWhiteSpace(fileRec.FileName) && System.IO.File.Exists(orig))
+                        path = orig;
+                    else
+                        return NotFound("File not found on disk.");
+                }
+            }
+
+            await _fileRepository.UpdateFileDownloadLinkAsync(fileId, Path.GetFileName(path));
+
             const string xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-            return File(fileBytes, xlsx, safeName);
+            return PhysicalFile(path, xlsx, fileDownloadName: Path.GetFileName(path));
         }
+
 
         [HttpGet("get-all-files")]
         public async Task<IActionResult> GetAllFiles()
