@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Newtonsoft.Json;
@@ -309,23 +310,44 @@ namespace TagFlowApi.Controllers
             }
         }
 
+        // Add inside the FileController class
+
         [HttpGet("diag-write")]
-        public IActionResult DiagWrite()
+        [AllowAnonymous] // allow hitting it with just the X-Api-Key header
+        public IActionResult DiagWrite([FromServices] IConfiguration cfg, [FromServices] ILogger<FileController> logger)
         {
+            // --- API key check (same key you use in appsettings.json) ---
+            var headerKey = Request.Headers["X-Api-Key"].FirstOrDefault();
+            var expected = cfg["ApiKey"]
+                           ?? Environment.GetEnvironmentVariable("API_KEY")
+                           ?? Environment.GetEnvironmentVariable("ApiKey");
+
+            if (string.IsNullOrWhiteSpace(expected) || !string.Equals(headerKey, expected))
+            {
+                logger.LogWarning("diag-write: API key missing/invalid.");
+                return Unauthorized("API Key is missing or invalid.");
+            }
+
+            // --- Write a simple file to prove disk write works ---
+            var stamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
+            var fileName = $"_diag_{stamp}.txt";
+            var absPath = "/var/lib/tagflow/merged"; // hard-coded on purpose
+            var fullPath = System.IO.Path.Combine(absPath, fileName);
+
             try
             {
-                var stamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
-                var p = System.IO.Path.Combine(_mergedFilesPath, $"_diag_{stamp}.txt");
-                System.IO.File.WriteAllText(p, $"hello from diag {stamp}");
-                Console.WriteLine($"[MERGE] DIAG wrote {p}");
-                return Ok(new { ok = true, path = p });
+                System.IO.Directory.CreateDirectory(absPath); // idempotent
+                System.IO.File.WriteAllText(fullPath, $"diag ok @ {stamp}\n");
+                logger.LogInformation("diag-write: wrote {FullPath}", fullPath);
+                return Ok(new { ok = true, path = fullPath });
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[MERGE] DIAG failed: {ex}");
-                return StatusCode(500, new { ok = false, error = ex.Message });
+                logger.LogError(ex, "diag-write: failed to write {FullPath}", fullPath);
+                return StatusCode(500, new { ok = false, error = ex.Message, path = fullPath });
             }
         }
+
 
 
 
