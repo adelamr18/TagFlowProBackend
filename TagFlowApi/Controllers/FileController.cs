@@ -312,41 +312,41 @@ namespace TagFlowApi.Controllers
 
         // Add inside the FileController class
 
+        // FileController.cs (inside the FileController class)
+
         [HttpGet("diag-write")]
-        [AllowAnonymous] // allow hitting it with just the X-Api-Key header
+        [AllowAnonymous]  // so only the header check applies
         public IActionResult DiagWrite([FromServices] IConfiguration cfg, [FromServices] ILogger<FileController> logger)
         {
-            // --- API key check (same key you use in appsettings.json) ---
-            var headerKey = Request.Headers["X-Api-Key"].FirstOrDefault();
+            var provided = Request.Headers["X-Api-Key"].FirstOrDefault();
             var expected = cfg["ApiKey"]
                            ?? Environment.GetEnvironmentVariable("API_KEY")
                            ?? Environment.GetEnvironmentVariable("ApiKey");
 
-            if (string.IsNullOrWhiteSpace(expected) || !string.Equals(headerKey, expected))
+            if (string.IsNullOrWhiteSpace(expected) || !string.Equals(provided, expected))
             {
                 logger.LogWarning("diag-write: API key missing/invalid.");
                 return Unauthorized("API Key is missing or invalid.");
             }
 
-            // --- Write a simple file to prove disk write works ---
+            var dir = "/var/lib/tagflow/merged";
             var stamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
-            var fileName = $"_diag_{stamp}.txt";
-            var absPath = "/var/lib/tagflow/merged"; // hard-coded on purpose
-            var fullPath = System.IO.Path.Combine(absPath, fileName);
+            var path = System.IO.Path.Combine(dir, $"_diag_{stamp}.txt");
 
             try
             {
-                System.IO.Directory.CreateDirectory(absPath); // idempotent
-                System.IO.File.WriteAllText(fullPath, $"diag ok @ {stamp}\n");
-                logger.LogInformation("diag-write: wrote {FullPath}", fullPath);
-                return Ok(new { ok = true, path = fullPath });
+                System.IO.Directory.CreateDirectory(dir);
+                System.IO.File.WriteAllText(path, $"ok {stamp}\n");
+                logger.LogInformation("diag-write wrote {Path}", path);
+                return Ok(new { ok = true, path });
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "diag-write: failed to write {FullPath}", fullPath);
-                return StatusCode(500, new { ok = false, error = ex.Message, path = fullPath });
+                logger.LogError(ex, "diag-write failed writing {Path}", path);
+                return StatusCode(500, new { ok = false, error = ex.Message, path });
             }
         }
+
 
 
 
