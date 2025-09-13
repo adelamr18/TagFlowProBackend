@@ -454,11 +454,11 @@ namespace TagFlowApi.Repositories
         {
             var dbHeaders = new[]
             {
-            "InsuranceCompany", "MedicalNetwork", "IdentityNumber",
-            "PolicyNumber", "Class", "DeductIblerate", "MaxLimit",
-            "UploadDate", "insuranceExpiryDate", "beneficiaryType", "beneficiaryNumber",
-            "Gender","FileRowStatus"
-            };
+        "InsuranceCompany", "MedicalNetwork", "IdentityNumber",
+        "PolicyNumber", "Class", "DeductIblerate", "MaxLimit",
+        "UploadDate", "insuranceExpiryDate", "beneficiaryType", "beneficiaryNumber",
+        "Gender", "FileRowStatus"
+    };
 
             var uploadedData = ReadOriginalExcelDataAsync(originalFile);
             var uploadedDataLower = uploadedData.Select(dict =>
@@ -472,7 +472,8 @@ namespace TagFlowApi.Repositories
 
             var dbRows = await _context.FileRows
                 .Where(fr => originalSsnIds.Contains(fr.SsnId) &&
-                    (fr.Status.ToLower() == PROCESSED_STATUS.ToLower() || fr.Status.ToLower() == PROCESSED_WITH_ERROR.ToLower()))
+                    (fr.Status.ToLower() == PROCESSED_STATUS.ToLower() ||
+                     fr.Status.ToLower() == PROCESSED_WITH_ERROR.ToLower()))
                 .Distinct()
                 .ToListAsync();
 
@@ -495,11 +496,12 @@ namespace TagFlowApi.Repositories
                 }
             }
 
-            var directoryPath = Path.Combine(Path.GetTempPath(), "MergedFiles");
+            var directoryPath = "/var/lib/tagflow/merged";
             if (!Directory.Exists(directoryPath))
             {
                 Directory.CreateDirectory(directoryPath);
             }
+
             var fileName = $"File_{fileId}_Merged.xlsx";
             var filePath = Path.Combine(directoryPath, fileName);
 
@@ -560,6 +562,7 @@ namespace TagFlowApi.Repositories
 
             return fileName;
         }
+
 
         private static List<Dictionary<string, string>> ReadExcelDataFromFilePathAsync(string filePath)
         {
