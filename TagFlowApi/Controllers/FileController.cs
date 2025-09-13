@@ -28,17 +28,23 @@ namespace TagFlowApi.Controllers
         }
 
         [HttpPost("upload-file")]
+        [DisableRequestSizeLimit]
+        [RequestSizeLimit(500_000_000)]
+        [RequestFormLimits(MultipartBodyLengthLimit = 500_000_000,
+                     ValueLengthLimit = int.MaxValue,
+                     MultipartHeadersLengthLimit = int.MaxValue)]
         public async Task<IActionResult> UploadFile(
-       [FromForm] string addedFileName,
-       [FromForm] string fileStatus,
-       [FromForm] int fileRowsCount,
-       [FromForm] string uploadedByUserName,
-       [FromForm] int selectedProjectId,
-       [FromForm] string? selectedPatientTypeIds,
-       [FromForm] int userId,
-       [FromForm] bool isAdmin,
-       [FromForm] string fileUploadedOn,
-       [FromForm] IFormFile file)
+      [FromForm] string addedFileName,
+      [FromForm] string fileStatus,
+      [FromForm] int fileRowsCount,
+      [FromForm] string uploadedByUserName,
+      [FromForm] int selectedProjectId,
+      [FromForm] string? selectedPatientTypeIds,
+      [FromForm] int userId,
+      [FromForm] bool isAdmin,
+      [FromForm] string fileUploadedOn,
+      [FromForm] IFormFile file)
+
         {
             try
             {
@@ -60,7 +66,6 @@ namespace TagFlowApi.Controllers
                     }
                 }
 
-                // Reset memory stream position for the actual file upload
                 memory.Position = 0;
 
                 var patientTypeIds = string.IsNullOrEmpty(selectedPatientTypeIds)
@@ -79,8 +84,8 @@ namespace TagFlowApi.Controllers
                     IsAdmin = isAdmin,
                     File = file,
                     FileUploadedOn = string.IsNullOrWhiteSpace(fileUploadedOn)
-           ? DateTime.UtcNow
-           : DateTime.Parse(fileUploadedOn).ToUniversalTime()
+                ? DateTime.UtcNow
+                : DateTime.Parse(fileUploadedOn).ToUniversalTime()
                 };
 
                 using (var fileStream = new MemoryStream(memory.ToArray()))
