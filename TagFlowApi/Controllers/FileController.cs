@@ -309,6 +309,25 @@ namespace TagFlowApi.Controllers
             }
         }
 
+        [HttpGet("diag-write")]
+        public IActionResult DiagWrite()
+        {
+            try
+            {
+                var stamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
+                var p = System.IO.Path.Combine(_mergedFilesPath, $"_diag_{stamp}.txt");
+                System.IO.File.WriteAllText(p, $"hello from diag {stamp}");
+                Console.WriteLine($"[MERGE] DIAG wrote {p}");
+                return Ok(new { ok = true, path = p });
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[MERGE] DIAG failed: {ex}");
+                return StatusCode(500, new { ok = false, error = ex.Message });
+            }
+        }
+
+
 
 
     }
