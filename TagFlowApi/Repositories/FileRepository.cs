@@ -19,9 +19,12 @@ namespace TagFlowApi.Repositories
         private static readonly string PROCESSING_STATUS = "Processing";
         private static readonly string UNPROCESSED_STATUS = "Unprocessed";
         private static readonly string BASE_URL = "https://172.29.2.2:8080";
-        public FileRepository(DataContext context)
+        private readonly IConfiguration _config;
+
+        public FileRepository(DataContext context, IConfiguration config)
         {
             _context = context;
+            _config = config;
             ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
         }
 
@@ -192,7 +195,11 @@ namespace TagFlowApi.Repositories
             string? downloadLink = null;
             if (fileName != null)
             {
-                var apiKey = Environment.GetEnvironmentVariable("API_KEY") ?? Environment.GetEnvironmentVariable("ApiKey");
+                var apiKey =
+                    _config["ApiKey"]
+                    ?? Environment.GetEnvironmentVariable("API_KEY")
+                    ?? Environment.GetEnvironmentVariable("ApiKey");
+
                 var qs = $"fileName={Uri.EscapeDataString(fileName)}&fileId={fileId}";
                 downloadLink = string.IsNullOrEmpty(apiKey)
                     ? $"{BASE_URL}/api/file/download?{qs}"
