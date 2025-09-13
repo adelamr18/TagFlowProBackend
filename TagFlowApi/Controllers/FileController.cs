@@ -292,6 +292,24 @@ namespace TagFlowApi.Controllers
             }
         }
 
+        [HttpPost("debug-write")]
+        public IActionResult DebugWrite([FromQuery] int fileId = 999)
+        {
+            try
+            {
+                var fn = $"debug_{fileId}.txt";
+                var path = Path.Combine("/var/lib/tagflow/merged", fn);
+                System.IO.File.WriteAllText(path, DateTime.UtcNow.ToString("O"));
+                var exists = System.IO.File.Exists(path);
+                return Ok(new { success = exists, path });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, error = ex.Message });
+            }
+        }
+
+
 
     }
 }
