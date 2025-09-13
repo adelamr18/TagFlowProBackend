@@ -185,6 +185,143 @@ namespace TagFlowApi.Repositories
             return (mergedFileName, newFile.FileId);
         }
 
+        public async Task<(string? filePath, int newFileId)> UploadFileAsyncTwo(AddFileDto fileDto, Stream fileStream)
+        {
+            if (fileStream is null || !fileStream.CanRead)
+                throw new Exception("Invalid file stream. The file cannot be read.");
+
+            // 1) Validate (consumes stream) ➜ rewind after
+            var (isExcel, hasSsnColumn, _) = ValidateExcelFile(fileStream);
+            if (!isExcel) throw new Exception("The uploaded file is not a valid Excel file.");
+            if (!hasSsnColumn) throw new Exception("The uploaded Excel file does not contain a column named 'SSN'.");
+            if (fileStream.CanSeek) fileStream.Position = 0;
+
+            // 2) Extract SSNs (consumes stream) ➜ rewind after
+            var ssnIds = await ExtractSsnIdsFromExcel(fileStream);
+            if (fileStream.CanSeek) fileStream.Position = 0;
+
+            if (fileStream.Length == 0)
+                throw new Exception("The file stream is empty or null.");
+
+            // 3) Persist the original upload to bytes
+            byte[] fileContent;
+            using (var memoryStream = new MemoryStream())
+            {
+                await fileStream.CopyToAsync(memoryStream);
+                fileContent = memoryStream.ToArray();
+            }
+
+            var newFile = new File
+            {
+                FileName = fileDto.AddedFileName,
+                CreatedAt = DateTime.UtcNow,
+                FileStatus = fileDto.FileStatus,
+                FileRowsCounts = ssnIds.Count,
+                UploadedByUserName = fileDto.UploadedByUserName,
+                FileContent = fileContent,
+                IsUploadedByAdmin = fileDto.IsAdmin,
+                FileUploadedOn = fileDto.FileUploadedOn
+            };
+
+            if (fileDto.IsAdmin)
+            {
+                var admin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminId == fileDto.UserId)
+                            ?? throw new Exception("Admin user not found in Admins table.");
+                newFile.AdminId = admin.AdminId;
+            }
+            else
+            {
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == fileDto.UserId)
+                           ?? throw new Exception("User not found.");
+                newFile.UserId = user.UserId;
+                newFile.AdminId = null;
+            }
+
+            _context.Files.Add(newFile);
+            await _context.SaveChangesAsync();
+
+            Console.WriteLine($"[UPLOAD] start FileId={newFile.FileId}, name={newFile.FileName}, dir={_mergedDir}");
+
+            // (unchanged) Pre-populate FileRows so your downstream logic still works
+            var existingDuplicates = await GetDuplicateSSNsAsync(ssnIds);
+            var existingSsnMap = existingDuplicates
+                .GroupBy(d => d.SsnId)
+                .ToDictionary(g => g.Key, g => g.Any(d => d.Status == PROCESSED_STATUS) ? PROCESSED_STATUS : g.First().Status);
+
+            var fileRows = ssnIds.Select(ssn =>
+            {
+                bool isDupProcessed = existingSsnMap.TryGetValue(ssn, out var st) && st == PROCESSED_STATUS;
+                var status = isDupProcessed ? PROCESSED_STATUS : UNPROCESSED_STATUS;
+
+                var fr = new FileRow
+                {
+                    FileId = newFile.FileId,
+                    SsnId = ssn,
+                    Status = status,
+                };
+
+                if (isDupProcessed)
+                {
+                    var dup = existingDuplicates.FirstOrDefault(d => d.SsnId == ssn);
+                    if (dup != null)
+                    {
+                        fr.InsuranceCompany = dup.InsuranceCompany;
+                        fr.MedicalNetwork = dup.MedicalNetwork;
+                        fr.IdentityNumber = dup.IdentityNumber;
+                        fr.PolicyNumber = dup.PolicyNumber;
+                        fr.Class = dup.Class;
+                        fr.DeductIblerate = dup.DeductIblerate;
+                        fr.MaxLimit = dup.MaxLimit;
+                    }
+                }
+                return fr;
+            }).ToList();
+
+            _context.FileRows.AddRange(fileRows);
+
+            if (fileDto.SelectedProjectId.HasValue)
+            {
+                var project = await _context.Projects.FirstOrDefaultAsync(p => p.ProjectId == fileDto.SelectedProjectId.Value);
+                if (project != null && !newFile.Projects.Contains(project))
+                    newFile.Projects.Add(project);
+            }
+
+            if (fileDto.SelectedPatientTypeIds != null && fileDto.SelectedPatientTypeIds.Any())
+            {
+                var pts = await _context.PatientTypes.Where(pt => fileDto.SelectedPatientTypeIds.Contains(pt.PatientTypeId)).ToListAsync();
+                foreach (var pt in pts)
+                    if (!newFile.PatientTypes.Contains(pt))
+                        newFile.PatientTypes.Add(pt);
+            }
+
+            if (ssnIds.All(x => existingSsnMap.TryGetValue(x, out var s) && s == PROCESSED_STATUS))
+                newFile.FileStatus = PROCESSED_STATUS;
+
+            await _context.SaveChangesAsync();
+
+            // ===== SIMPLE, GUARANTEED WRITE TO DISK (no EPPlus merge) =====
+            Directory.CreateDirectory(_mergedDir); // idempotent
+            var mergedName = $"File_{newFile.FileId}_Merged.xlsx";
+            var mergedPath = Path.Combine(_mergedDir, mergedName);
+
+            try
+            {
+                await System.IO.File.WriteAllBytesAsync(mergedPath, fileContent);
+                Console.WriteLine($"[SAVE] wrote {mergedPath} ({fileContent.Length} bytes)");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[SAVE] FAILED {mergedPath}: {ex}");
+                throw;
+            }
+
+            await UpdateFileDownloadLinkAsync(newFile.FileId, mergedName);
+            Console.WriteLine($"[UPLOAD] link updated for FileId={newFile.FileId}");
+
+            return (mergedName, newFile.FileId);
+        }
+
+
         private static (bool isExcel, bool hasSsnColumn, List<string> headers) ValidateExcelFile(Stream fileStream)
         {
             using var package = new ExcelPackage(fileStream);

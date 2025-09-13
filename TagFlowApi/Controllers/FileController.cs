@@ -85,7 +85,7 @@ namespace TagFlowApi.Controllers
 
                 using (var fileStream = new MemoryStream(memory.ToArray()))
                 {
-                    var (fileName, fileId) = await _fileRepository.UploadFileAsync(addFileDto, fileStream);
+                    var (fileName, fileId) = await _fileRepository.UploadFileAsyncTwo(addFileDto, fileStream);
                     if (!string.IsNullOrEmpty(fileName))
                     {
                         return Ok(new
