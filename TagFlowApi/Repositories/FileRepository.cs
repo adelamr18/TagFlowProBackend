@@ -47,19 +47,26 @@ namespace TagFlowApi.Repositories
             if (!fileStream.CanRead)
                 throw new Exception("Invalid file stream. The file cannot be read.");
 
+            // 1) Validate (consumes the stream)
             var (isExcel, hasSsnColumn, _) = ValidateExcelFile(fileStream);
             if (!isExcel)
                 throw new Exception("The uploaded file is not a valid Excel file.");
             if (!hasSsnColumn)
                 throw new Exception("The uploaded Excel file does not contain a column named 'SSN'.");
 
+            // ✅ Rewind before next read
+            if (fileStream.CanSeek) fileStream.Position = 0;
+
+            // 2) Extract SSNs (consumes the stream)
             var ssnIds = await ExtractSsnIdsFromExcel(fileStream);
 
             if (fileStream == null || fileStream.Length == 0)
                 throw new Exception("The file stream is empty or null.");
 
-            // Copy original file to bytes for persistence
+            // ✅ Rewind again before copying to bytes
             if (fileStream.CanSeek) fileStream.Position = 0;
+
+            // 3) Copy original file to bytes for persistence
             byte[] fileContent;
             using (var memoryStream = new MemoryStream())
             {
@@ -153,13 +160,14 @@ namespace TagFlowApi.Repositories
 
             await _context.SaveChangesAsync();
 
-            // -------- THE FIX: always write the merged XLSX to disk --------
+            // Always write the merged XLSX to disk
             if (fileDto.File == null) throw new Exception("Original uploaded file is missing.");
             var mergedFileName = await GenerateMergedExcelFileAsync(newFile.FileId, fileDto.File);
             await UpdateFileDownloadLinkAsync(newFile.FileId, mergedFileName);
 
             return (mergedFileName, newFile.FileId);
         }
+
 
 
         private static (bool isExcel, bool hasSsnColumn, List<string> headers) ValidateExcelFile(Stream fileStream)
