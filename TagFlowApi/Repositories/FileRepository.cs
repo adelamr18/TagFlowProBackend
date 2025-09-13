@@ -20,12 +20,19 @@ namespace TagFlowApi.Repositories
         private static readonly string UNPROCESSED_STATUS = "Unprocessed";
         private static readonly string BASE_URL = "https://172.29.2.2:8080";
         private readonly IConfiguration _config;
+        private readonly string _mergedDir;
+
 
         public FileRepository(DataContext context, IConfiguration config)
         {
             _context = context;
             _config = config;
             ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+            _mergedDir = _config["MergedDir"]
+             ?? Environment.GetEnvironmentVariable("MERGED_DIR")
+             ?? "/var/lib/tagflow/merged";
+            Directory.CreateDirectory(_mergedDir);
+
         }
 
         public async Task<List<FileRow>> GetDuplicateSSNsAsync(List<string> ssnIds)
@@ -461,9 +468,9 @@ namespace TagFlowApi.Repositories
     };
 
             var uploadedData = ReadOriginalExcelDataAsync(originalFile);
-            var uploadedDataLower = uploadedData.Select(dict =>
-                dict.ToDictionary(kvp => kvp.Key.ToLower(), kvp => kvp.Value)
-            ).ToList();
+            var uploadedDataLower = uploadedData
+                .Select(dict => dict.ToDictionary(kvp => kvp.Key.ToLower(), kvp => kvp.Value))
+                .ToList();
 
             var originalSsnIds = uploadedDataLower
                 .Select(row => row.ContainsKey("ssn") ? row["ssn"] : null)
@@ -472,49 +479,39 @@ namespace TagFlowApi.Repositories
 
             var dbRows = await _context.FileRows
                 .Where(fr => originalSsnIds.Contains(fr.SsnId) &&
-                    (fr.Status.ToLower() == PROCESSED_STATUS.ToLower() ||
-                     fr.Status.ToLower() == PROCESSED_WITH_ERROR.ToLower()))
+                             (fr.Status.ToLower() == PROCESSED_STATUS.ToLower() ||
+                              fr.Status.ToLower() == PROCESSED_WITH_ERROR.ToLower()))
                 .Distinct()
                 .ToListAsync();
 
-            List<Dictionary<string, string>> existingData = new List<Dictionary<string, string>>();
+            List<Dictionary<string, string>> existingData = new();
             if (!string.IsNullOrEmpty(existingFilePath) && System.IO.File.Exists(existingFilePath))
             {
-                existingData = ReadExcelDataFromFilePathAsync(existingFilePath);
-                existingData = existingData.Select(dict =>
-                    dict.ToDictionary(kvp => kvp.Key.ToLower(), kvp => kvp.Value)
-                ).ToList();
+                existingData = ReadExcelDataFromFilePathAsync(existingFilePath)
+                    .Select(dict => dict.ToDictionary(kvp => kvp.Key.ToLower(), kvp => kvp.Value))
+                    .ToList();
             }
 
             var mergedData = new List<Dictionary<string, string>>();
             mergedData.AddRange(uploadedDataLower);
+
             foreach (var existingRow in existingData)
             {
                 if (existingRow.ContainsKey("ssn") && !originalSsnIds.Contains(existingRow["ssn"]))
-                {
                     mergedData.Add(existingRow);
-                }
-            }
-
-            var directoryPath = "/var/lib/tagflow/merged";
-            if (!Directory.Exists(directoryPath))
-            {
-                Directory.CreateDirectory(directoryPath);
             }
 
             var fileName = $"File_{fileId}_Merged.xlsx";
-            var filePath = Path.Combine(directoryPath, fileName);
+            var filePath = Path.Combine(_mergedDir, fileName);
 
-            using var package = new ExcelPackage();
+            using var package = new OfficeOpenXml.ExcelPackage();
             var worksheet = package.Workbook.Worksheets.Add("Merged Data");
 
             var dynamicHeaders = uploadedDataLower.FirstOrDefault()?.Keys.ToList() ?? new List<string>();
             var allHeaders = dynamicHeaders.Concat(dbHeaders).ToList();
 
             for (int col = 0; col < allHeaders.Count; col++)
-            {
                 worksheet.Cells[1, col + 1].Value = allHeaders[col];
-            }
 
             int rowNumber = 2;
             foreach (var row in mergedData)
@@ -529,37 +526,28 @@ namespace TagFlowApi.Repositories
                 var ssnId = row.ContainsKey("ssn") ? row["ssn"] : null;
                 if (!string.IsNullOrEmpty(ssnId))
                 {
-                    var matchingDbRow = dbRows.FirstOrDefault(dbRow => dbRow.SsnId == ssnId);
-                    if (matchingDbRow != null)
+                    var m = dbRows.FirstOrDefault(dbRow => dbRow.SsnId == ssnId);
+                    if (m != null)
                     {
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 1].Value = matchingDbRow.InsuranceCompany;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 2].Value = matchingDbRow.MedicalNetwork;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 3].Value = matchingDbRow.IdentityNumber;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 4].Value = matchingDbRow.PolicyNumber;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 5].Value = matchingDbRow.Class;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 6].Value = matchingDbRow.DeductIblerate;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 7].Value = matchingDbRow.MaxLimit;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 8].Value = matchingDbRow.UploadDate;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 9].Value = matchingDbRow.InsuranceExpiryDate;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 10].Value = matchingDbRow.BeneficiaryType;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 11].Value = matchingDbRow.BeneficiaryNumber;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 12].Value = matchingDbRow.Gender;
-                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 13].Value = matchingDbRow.Status;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 1].Value = m.InsuranceCompany;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 2].Value = m.MedicalNetwork;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 3].Value = m.IdentityNumber;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 4].Value = m.PolicyNumber;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 5].Value = m.Class;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 6].Value = m.DeductIblerate;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 7].Value = m.MaxLimit;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 8].Value = m.UploadDate;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 9].Value = m.InsuranceExpiryDate;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 10].Value = m.BeneficiaryType;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 11].Value = m.BeneficiaryNumber;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 12].Value = m.Gender;
+                        worksheet.Cells[rowNumber, dynamicHeaders.Count + 13].Value = m.Status;
                     }
                 }
-
                 rowNumber++;
             }
 
-            try
-            {
-                await package.SaveAsAsync(new FileInfo(filePath));
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error saving file: {ex.Message}");
-            }
-
+            await package.SaveAsAsync(new FileInfo(filePath));
             return fileName;
         }
 
