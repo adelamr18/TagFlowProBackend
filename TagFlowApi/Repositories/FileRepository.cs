@@ -56,15 +56,11 @@ namespace TagFlowApi.Repositories
             var ssnIds = await ExtractSsnIdsFromExcel(fileStream);
 
             if (fileStream == null || fileStream.Length == 0)
-            {
                 throw new Exception("The file stream is empty or null.");
-            }
 
+            // Copy original file to bytes for persistence
+            if (fileStream.CanSeek) fileStream.Position = 0;
             byte[] fileContent;
-            if (fileStream.CanSeek)
-            {
-                fileStream.Position = 0;
-            }
             using (var memoryStream = new MemoryStream())
             {
                 await fileStream.CopyToAsync(memoryStream);
@@ -85,16 +81,14 @@ namespace TagFlowApi.Repositories
 
             if (fileDto.IsAdmin)
             {
-                var admin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminId == fileDto.UserId);
-                if (admin == null)
-                    throw new Exception("Admin user not found in Admins table.");
+                var admin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminId == fileDto.UserId)
+                            ?? throw new Exception("Admin user not found in Admins table.");
                 newFile.AdminId = admin.AdminId;
             }
             else
             {
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == fileDto.UserId);
-                if (user == null)
-                    throw new Exception("User not found.");
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == fileDto.UserId)
+                           ?? throw new Exception("User not found.");
                 newFile.UserId = user.UserId;
                 newFile.AdminId = null;
             }
@@ -102,36 +96,40 @@ namespace TagFlowApi.Repositories
             _context.Files.Add(newFile);
             await _context.SaveChangesAsync();
 
+            // Pre-populate FileRows (unchanged)
             var existingDuplicates = await GetDuplicateSSNsAsync(ssnIds);
             var existingSsnMap = existingDuplicates
                 .GroupBy(d => d.SsnId)
                 .ToDictionary(g => g.Key, g => g.Any(d => d.Status == PROCESSED_STATUS) ? PROCESSED_STATUS : g.First().Status);
+
             var fileRows = ssnIds.Select(ssn =>
-      {
-          bool isDuplicateProcessed = existingSsnMap.TryGetValue(ssn, out var existingStatus) && existingStatus == PROCESSED_STATUS;
-          var status = isDuplicateProcessed ? PROCESSED_STATUS : UNPROCESSED_STATUS;
-          var fileRow = new FileRow
-          {
-              FileId = newFile.FileId,
-              SsnId = ssn,
-              Status = status,
-          };
-          if (isDuplicateProcessed)
-          {
-              var duplicate = existingDuplicates.FirstOrDefault(d => d.SsnId == ssn);
-              if (duplicate != null)
-              {
-                  fileRow.InsuranceCompany = duplicate.InsuranceCompany;
-                  fileRow.MedicalNetwork = duplicate.MedicalNetwork;
-                  fileRow.IdentityNumber = duplicate.IdentityNumber;
-                  fileRow.PolicyNumber = duplicate.PolicyNumber;
-                  fileRow.Class = duplicate.Class;
-                  fileRow.DeductIblerate = duplicate.DeductIblerate;
-                  fileRow.MaxLimit = duplicate.MaxLimit;
-              }
-          }
-          return fileRow;
-      }).ToList();
+            {
+                bool isDuplicateProcessed = existingSsnMap.TryGetValue(ssn, out var existingStatus) && existingStatus == PROCESSED_STATUS;
+                var status = isDuplicateProcessed ? PROCESSED_STATUS : UNPROCESSED_STATUS;
+
+                var fr = new FileRow
+                {
+                    FileId = newFile.FileId,
+                    SsnId = ssn,
+                    Status = status,
+                };
+
+                if (isDuplicateProcessed)
+                {
+                    var dup = existingDuplicates.FirstOrDefault(d => d.SsnId == ssn);
+                    if (dup != null)
+                    {
+                        fr.InsuranceCompany = dup.InsuranceCompany;
+                        fr.MedicalNetwork = dup.MedicalNetwork;
+                        fr.IdentityNumber = dup.IdentityNumber;
+                        fr.PolicyNumber = dup.PolicyNumber;
+                        fr.Class = dup.Class;
+                        fr.DeductIblerate = dup.DeductIblerate;
+                        fr.MaxLimit = dup.MaxLimit;
+                    }
+                }
+                return fr;
+            }).ToList();
 
             _context.FileRows.AddRange(fileRows);
 
@@ -139,34 +137,30 @@ namespace TagFlowApi.Repositories
             {
                 var project = await _context.Projects.FirstOrDefaultAsync(p => p.ProjectId == fileDto.SelectedProjectId.Value);
                 if (project != null && !newFile.Projects.Contains(project))
-                {
                     newFile.Projects.Add(project);
-                }
             }
 
             if (fileDto.SelectedPatientTypeIds != null && fileDto.SelectedPatientTypeIds.Any())
             {
                 var pts = await _context.PatientTypes.Where(pt => fileDto.SelectedPatientTypeIds.Contains(pt.PatientTypeId)).ToListAsync();
                 foreach (var pt in pts)
-                {
                     if (!newFile.PatientTypes.Contains(pt))
-                    {
                         newFile.PatientTypes.Add(pt);
-                    }
-                }
             }
 
-            if (ssnIds.All(ssn => existingSsnMap.TryGetValue(ssn, out var status) && status == PROCESSED_STATUS))
+            if (ssnIds.All(ssn => existingSsnMap.TryGetValue(ssn, out var s) && s == PROCESSED_STATUS))
                 newFile.FileStatus = PROCESSED_STATUS;
 
             await _context.SaveChangesAsync();
 
-            string mergedFileName = await GenerateMergedExcelFileAsync(newFile.FileId, fileDto.File);
-
+            // -------- THE FIX: always write the merged XLSX to disk --------
+            if (fileDto.File == null) throw new Exception("Original uploaded file is missing.");
+            var mergedFileName = await GenerateMergedExcelFileAsync(newFile.FileId, fileDto.File);
             await UpdateFileDownloadLinkAsync(newFile.FileId, mergedFileName);
 
             return (mergedFileName, newFile.FileId);
         }
+
 
         private static (bool isExcel, bool hasSsnColumn, List<string> headers) ValidateExcelFile(Stream fileStream)
         {
