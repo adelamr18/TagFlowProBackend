@@ -481,6 +481,22 @@ namespace TagFlowApi.Repositories
             }
         }
 
+        public async Task<int> ProcessAllExpiredAsync(IHubContext<FileStatusHub> hubContext, CancellationToken ct = default)
+        {
+            var fileIds = await _context.FileRows
+                .Where(fr => !string.IsNullOrEmpty(fr.InsuranceExpiryDate))
+                .Select(fr => fr.FileId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            foreach (var fileId in fileIds)
+            {
+                await ProcessExpiredSsnIdsAsync(fileId, hubContext);
+            }
+
+            return fileIds.Count;
+        }
+
         public async Task UpdateProcessedDataAsync(int fileId, [FromBody] List<FileRowDto> updates, IHubContext<FileStatusHub> hubContext)
         {
             using (var transaction = await _context.Database.BeginTransactionAsync())

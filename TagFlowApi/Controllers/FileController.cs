@@ -298,5 +298,27 @@ namespace TagFlowApi.Controllers
             }
         }
 
+        [HttpPost("cron/process-expired")]
+        public async Task<IActionResult> CronProcessExpired()
+        {
+            try
+            {
+                var filesProcessed = await _fileRepository.ProcessAllExpiredAsync(_hubContext, HttpContext.RequestAborted);
+                return Ok(new
+                {
+                    success = true,
+                    filesProcessed,
+                    message = $"Processed expired SSNs for {filesProcessed} file(s)."
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, error = ex.Message });
+            }
+        }
+
     }
+
+
 }
+
