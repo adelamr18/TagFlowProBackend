@@ -35,6 +35,15 @@ namespace TagFlowApi.Infrastructure
                 .HasIndex(fr => fr.SsnId)
                 .IsUnique(false);
 
+            modelBuilder.Entity<FileRow>()
+                .Property(fr => fr.ProcessingStartedAt)
+                .HasColumnType("timestamptz")
+                .IsRequired(false);
+
+            modelBuilder.Entity<FileRow>()
+                .HasIndex(fr => new { fr.Status, fr.ProcessingStartedAt })
+                .IsUnique(false);
+
             // User and Admin indices
             modelBuilder.Entity<User>()
                 .HasIndex(u => u.Email)

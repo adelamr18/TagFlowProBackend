@@ -317,6 +317,17 @@ namespace TagFlowApi.Controllers
             }
         }
 
+        [HttpPost("cron/release-stale-processing")]
+        public async Task<IActionResult> CronReleaseStaleProcessing(
+    [FromServices] IConfiguration cfg,
+    CancellationToken ct)
+        {
+
+            var released = await _fileRepository.ReleaseStaleProcessingAsync(TimeSpan.FromMinutes(15), ct);
+
+            return Ok(new { success = true, released, thresholdMinutes = 15 });
+        }
+
     }
 
 

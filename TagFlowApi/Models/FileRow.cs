@@ -18,6 +18,7 @@ namespace TagFlowApi.Models
         public string BeneficiaryType { get; set; } = "";
         public string BeneficiaryNumber { get; set; } = "";
         public string Gender { get; set; } = "";
+        public DateTime? ProcessingStartedAt { get; set; }
 
         // Navigation property
         public File File { get; set; } = null!;

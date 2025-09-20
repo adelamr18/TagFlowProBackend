@@ -435,9 +435,11 @@ namespace TagFlowApi.Repositories
 
                 if (unprocessedRows.Any())
                 {
+                    var now = DateTime.UtcNow;
                     foreach (var row in unprocessedRows)
                     {
                         row.Status = PROCESSING_STATUS;
+                        row.ProcessingStartedAt = now;
                     }
 
                     await _context.SaveChangesAsync();
@@ -452,6 +454,41 @@ namespace TagFlowApi.Repositories
                 throw;
             }
         }
+
+        public async Task<int> ReleaseStaleProcessingAsync(TimeSpan maxAge, CancellationToken ct = default)
+        {
+            var cutoff = DateTime.UtcNow - maxAge;
+
+            using var tx = await _context.Database.BeginTransactionAsync(ct);
+            try
+            {
+                var stale = await _context.FileRows
+                    .Where(fr => fr.Status == PROCESSING_STATUS
+                              && fr.ProcessingStartedAt != null
+                              && fr.ProcessingStartedAt < cutoff)
+                    .OrderBy(fr => fr.FileRowId)
+                    .ToListAsync(ct);
+
+                foreach (var row in stale)
+                {
+                    row.Status = UNPROCESSED_STATUS;
+                    row.ProcessingStartedAt = null; // reset
+                }
+
+                var count = stale.Count;
+                if (count > 0)
+                    await _context.SaveChangesAsync(ct);
+
+                await tx.CommitAsync(ct);
+                return count;
+            }
+            catch
+            {
+                await tx.RollbackAsync(ct);
+                throw;
+            }
+        }
+
         public async Task ProcessExpiredSsnIdsAsync(int fileId, IHubContext<FileStatusHub> hubContext)
         {
             var todayString = DateTime.UtcNow.ToString("yyyy-MM-dd");
@@ -533,6 +570,16 @@ namespace TagFlowApi.Repositories
                         else
                         {
                             fileRow.Status = update.Status;
+
+                            if (string.Equals(update.Status, "Processing", StringComparison.OrdinalIgnoreCase))
+                            {
+                                fileRow.ProcessingStartedAt = DateTime.UtcNow;
+                            }
+                            else
+                            {
+                                fileRow.ProcessingStartedAt = null;
+                            }
+
                             fileRow.SsnId = update.Ssn;
                             fileRow.InsuranceCompany = update.InsuranceCompany;
                             fileRow.MedicalNetwork = update.MedicalNetwork;
@@ -1171,7 +1218,6 @@ namespace TagFlowApi.Repositories
 
             return entity.Id;
         }
-
 
     }
 }
